@@ -79,7 +79,7 @@ def reevaluate_centers(clusters):
 def has_converged(mu, oldmu):
     return set([tuple(a) for a in mu]) == set([tuple(a) for a in oldmu])
 
-def k_means(img, box, k=5):
+def k_means(img, box, k=2):
     y_min = box['y_min']
     y_max = box['y_max']
     x_min = box['x_min']+1
@@ -108,6 +108,12 @@ def k_means(img, box, k=5):
 def fit_gmm(img, seg_map, k=5):
     pass
 
+def jaccardSimiliarity(segmentation,truth):
+    truth = np.where(truth == 255, 1, 0)
+    total = segmentation + truth
+    intersection = np.sum(np.sum(np.where(total == 2, 1, 0)))
+    union = np.sum(np.sum(np.where(total == 1 or total == 2, 1, 0)))
+    return float(intersection)/float(union)*100
 # INITIALIZE THE FOREGROUND & BACKGROUND GAUSSIAN MIXTURE MODEL (GMM)
 # 
 # while CONVERGENCE
