@@ -53,33 +53,43 @@ def select_bounding_box(img):
     return box
 
 def cluster_points(X, mu):
-    clusters = {}
+    points = len(X)
+    color = [ ]
     for x in X:
-        color = x[0]
-        dist = [ ]
-        for i in mu:
-            dist.append((np.linalg.norm(color-i),i))
-        bestmukey = min(dist, key=lambda t:t[0])[1]
+        color.append(np.array(x[0]))
+    colorList = np.array(color)
+    colors = np.zeros((colorList.shape[0],3,len(mu)))
+    mus = np.zeros_like(colors)
+    for i in range(len(mu)):
+        colors[:,:,i] = colorList
+        mus[:,:,i] = np.tile(mu[i],(points,1))
+    difference = np.sum(np.square(colors - mus),axis = 1)
+    index = np.argmin(difference,axis=1)
+    clusters1 = { }
+    clusters2 = { }
+    for j,k,z in zip(index,range(points),color):
         try:
-            clusters[tuple(bestmukey)].append(x)
+            clusters1[tuple(mu[j])].append(k)
+            clusters2[tuple(mu[j])].append(z)
         except KeyError:
-            clusters[tuple(bestmukey)] = [x]
-    return clusters
+            clusters1[tuple(mu[j])] = [k]
+            clusters2[tuple(mu[j])] = [z]
+    return clusters1, clusters2
 
 def reevaluate_centers(clusters):
     newmu = [ ]
     for k in clusters:
         total = np.zeros((1,3))
         for a in clusters[k]:
-            total += a[0]
+            total += a
         total /= len(clusters[k])
-        newmu.append(total[0])
-    return newmu
+        newmu.append(total)
+    return [a[0] for a in newmu]
 
 def has_converged(mu, oldmu):
     return set([tuple(a) for a in mu]) == set([tuple(a) for a in oldmu])
 
-def k_means(img, box, k=2):
+def k_means(img, box, k=3):
     y_min = box['y_min']
     y_max = box['y_max']
     x_min = box['x_min']+1
@@ -96,13 +106,14 @@ def k_means(img, box, k=2):
         counter += 1
         oldmu = mu
         #assign points to clusters
-        clusters = cluster_points(colorList, mu)
+        clusters1, clusters2 = cluster_points(colorList, mu)
         #reevaluate centers
-        mu = reevaluate_centers(clusters)
+        mu = reevaluate_centers(clusters2)
     initial = np.zeros(img.shape)
-    for i,j in enumerate(clusters.keys()):
-        for k in clusters[j]:
-            initial[k[1]] = (i+1)*30
+    width = x_max - x_min
+    for i,j in enumerate(clusters1.keys()):
+        for k in clusters1[j]:
+            initial[int(k/width)+y_min,k%width+x_min] = (i+1)*30
     return initial
 
 def fit_gmm(img, seg_map, k=5):
