@@ -52,11 +52,8 @@ def select_bounding_box(img):
 
     return box
 
-def cluster_points(X, mu):
-    points = len(X)
-    color = [ ]
-    for x in X:
-        color.append(np.array(x[0]))
+def cluster_points(color, mu):
+    points = len(color)
     colorList = np.array(color)
     colors = np.zeros((colorList.shape[0],3,len(mu)))
     mus = np.zeros_like(colors)
@@ -89,7 +86,7 @@ def reevaluate_centers(clusters):
 def has_converged(mu, oldmu):
     return set([tuple(a) for a in mu]) == set([tuple(a) for a in oldmu])
 
-def k_means(img, box, k=3):
+def k_means(img, box, k=5):
     y_min = box['y_min']
     y_max = box['y_max']
     x_min = box['x_min']+1
@@ -97,9 +94,9 @@ def k_means(img, box, k=3):
     colorList = [ ]
     for y in range(int(y_min),int(y_max)):
         for x in range(int(x_min),int(x_max)):
-            colorList.append((img[y,x,:],(y,x)))
-    oldmu = [a[0] for a in random.sample(colorList,k)]
-    mu = [a[0] for a in random.sample(colorList,k)]
+            colorList.append(img[y,x,:])
+    oldmu = [a for a in random.sample(colorList,k)]
+    mu = [a for a in random.sample(colorList,k)]
     counter = 1
     while not has_converged(mu, oldmu):
         print counter
