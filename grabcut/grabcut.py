@@ -8,6 +8,7 @@ import scipy
 
 
 KMEANS_CONVERGENCE = 1.0
+MAX_NUM_ITERATIONS = 5
 
 def grabcut(image_file, box=None):
     print 'LOADING IMAGE FROM FILE: {}'.format(image_file)
@@ -25,20 +26,22 @@ def grabcut(image_file, box=None):
     seg_map = np.zeros((img.shape[0], img.shape[1]))
     seg_map[(box['y_min'] + 1):box['y_max'], (box['x_min'] + 1):box['x_max']] = 1
     
+    fg = img[seg_map == 1]
+    bg = img[seg_map == 0]
+
     # Initialize GMM components with k-means
-    initial = quick_k_means(img, seg_map)
-    scipy.misc.imsave('/Users/Jasper/Desktop/test.png',initial)
-    gmm = fit_gmm(img, seg_map)
+    fg_ass, bg_ass = quick_k_means(fg, bg)
+    
+    # Iteratively refine segmentation from initialization
+    for i in xrange(MAX_NUM_ITERATIONS):
+        fg_gmm, bg_gmm = fit_gmm(fg, bg, fg_ass, bg_ass)
 
     return seg_map
 
 def preprocess(img):
     return img
 
-def quick_k_means(img, seg_map, k=5):
-    foreground = img[seg_map == 1]
-    background = img[seg_map == 0]
-
+def quick_k_means(foreground, background, k=5):
     fg_mu = foreground[np.random.choice(foreground.shape[0], k), :]
     bg_mu = background[np.random.choice(background.shape[0], k), :]
     avg_centroid_change = float('Inf')
@@ -68,6 +71,28 @@ def quick_k_means(img, seg_map, k=5):
 
     return fg_ass, bg_ass
 
+def fit_gmm(fg, bg, fg_ass, bg_ass, k=5):
+    fg_gmms, bg_gmms = [], []
+
+    for i in xrange(k):
+        fg_cluster = fg[fg_ass == i]
+        bg_cluster = bg[bg_ass == i]
+
+        fg_gmm, bg_gmm = {}, {}
+
+        fg_gmm['mean'] = np.mean(fg_cluster, axis=0)
+        bg_gmm['mean'] = np.mean(bg_cluster, axis=0)
+
+        fg_gmm['cov'] = np.cov(fg_cluster, rowvar=0)
+        bg_gmm['cov'] = np.cov(bg_cluster, rowvar=0)
+
+        fg_gmm['size'] = fg_cluster.shape[0] * 1.0 / fg.shape[0]
+        bg_gmm['size'] = bg_cluster.shape[0] * 1.0 / bg.shape[0]
+
+        fg_gmms.append(fg_gmm)
+        bg_gmms.append(bg_gmm)
+
+    return fg_gmms, bg_gmms
 
 def select_bounding_box(img):
     plt.imshow(img)
@@ -153,10 +178,7 @@ def k_means(img, box, k=5):
             initial[int(k/width)+y_min,k%width+x_min] = (i+1)*30
     return initial
 
-def fit_gmm(img, seg_map, k=5):
-    pass
-
-def jaccardSimiliarity(segmentation,truth):
+def jaccard_similarity(segmentation,truth):
     truth = np.where(truth == 255, 1, 0)
     total = segmentation + truth
     intersection = np.sum(np.sum(np.where(total == 2, 1, 0)))
