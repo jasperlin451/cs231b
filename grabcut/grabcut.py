@@ -5,7 +5,7 @@ from scipy.misc import imread
 from scipy.spatial.distance import cdist
 import random
 import scipy
-
+import sys
 
 KMEANS_CONVERGENCE = 1.0
 MAX_NUM_ITERATIONS = 5
@@ -64,16 +64,28 @@ def get_unary(img, gmms):
     diff = np.zeros((img.shape[0],img.shape[1],len(gmms)))
     for i,component in enumerate(gmms):
         temp = np.square(img - component['mean'])
-        temp2 = np.sqrt(np.sum(temp,axis = 2))
+        diff[:,:,i] = np.sum(temp,axis = 2)
     k = np.argmin(diff, axis = 2)
-    k = np.flatten(k)
+    print k.shape
+    flat = k.flatten()
+    x = tuple(map(tuple,img))
+    imgData = [ ] 
+    for a in x:
+        imgData.extend(a)
     #cov matrix
     cov = [ ]
     mu = [ ]
-    for element in k:
-       cov.append(gmms[element]['cov'])
-       mu.append(gmms[element]['mean'])
-#print k.shape
+    for element in flat:
+        cov.append(gmms[element]['cov'])
+        mu.append(gmms[element]['mean'])
+    sub = np.subtract(imgData,mu)
+    print sub.shape
+    piece1 = -0.5*(np.log(2*np.pi)+np.log(np.linalg.det(cov)))
+    piece2 = [ ]
+    for y,z  in zip(sub,cov):
+        piece2.extend( -0.5*(np.dot(np.dot(y,np.linalg.inv(z)),y)))
+    probs = np.add(piece1,piece2)
+    return probs, k
 
 def quick_k_means(foreground, background, k=5):
     fg_mu = foreground[np.random.choice(foreground.shape[0], k), :]
@@ -117,8 +129,8 @@ def fit_gmm(fg, bg, fg_ass, bg_ass, k=5):
         fg_gmm['mean'] = np.mean(fg_cluster, axis=0)
         bg_gmm['mean'] = np.mean(bg_cluster, axis=0)
 
-        fg_gmm['cov'] = np.cov(fg_cluster, rowvar=0)
-        bg_gmm['cov'] = np.cov(bg_cluster, rowvar=0)
+        fg_gmm['cov'] = np.cov(fg_cluster, rowvar=0) + np.identity(3)*1e-8
+        bg_gmm['cov'] = np.cov(bg_cluster, rowvar=0) + np.identity(3)*1e-8
 
         fg_gmm['size'] = fg_cluster.shape[0] * 1.0 / fg.shape[0]
         bg_gmm['size'] = bg_cluster.shape[0] * 1.0 / bg.shape[0]
