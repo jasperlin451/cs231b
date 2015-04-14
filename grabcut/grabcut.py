@@ -35,11 +35,31 @@ def grabcut(image_file, box=None):
     # Iteratively refine segmentation from initialization
     for i in xrange(MAX_NUM_ITERATIONS):
         fg_gmm, bg_gmm = fit_gmm(fg, bg, fg_ass, bg_ass)
+        seg_map, fg_ass, bg_ass = estimate_segmentation(img, fg_gmm, bg_gmm, seg_map)
+
+        fg = img[seg_map == 1]
+        bg = img[seg_map == 0]
 
     return seg_map
 
 def preprocess(img):
     return img
+
+def estimate_segmentation(img, fg_gmm, bg_gmm, seg_map):
+    # Calculate unary values and component assignments
+    fg_unary, fg_ass = get_unary(img, fg_gmm)
+    bg_unary, bg_ass = get_unary(img, bg_gmm)
+
+    # Calculate pairwise values
+        # Use subimages shifted up, down, left, right
+    # Construct graph and run mincut on it
+    # Create bit map of result and return it
+
+    return seg_map, fg_ass, bg_ass
+
+def get_unary(img, gmms):
+    # Find closest component in gmm set
+    # Calculate log PDF
 
 def quick_k_means(foreground, background, k=5):
     fg_mu = foreground[np.random.choice(foreground.shape[0], k), :]
