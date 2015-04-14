@@ -60,6 +60,20 @@ def estimate_segmentation(img, fg_gmm, bg_gmm, seg_map):
 def get_unary(img, gmms):
     # Find closest component in gmm set
     # Calculate log PDF
+#Using equation 9 from Grabcut paper
+    diff = np.zeros((img.shape[0],img.shape[1],len(gmms)))
+    for i,component in enumerate(gmms):
+        temp = np.square(img - component['mean'])
+        temp2 = np.sqrt(np.sum(temp,axis = 2))
+    k = np.argmin(diff, axis = 2)
+    k = np.flatten(k)
+    #cov matrix
+    cov = [ ]
+    mu = [ ]
+    for element in k:
+       cov.append(gmms[element]['cov'])
+       mu.append(gmms[element]['mean'])
+#print k.shape
 
 def quick_k_means(foreground, background, k=5):
     fg_mu = foreground[np.random.choice(foreground.shape[0], k), :]
