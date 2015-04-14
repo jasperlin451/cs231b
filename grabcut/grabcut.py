@@ -2,8 +2,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pdb
 from scipy.misc import imread
+from scipy.spatial.distance import cdist
 import random
 import scipy
+
+
+KMEANS_CONVERGENCE = 1.0
+
 def grabcut(image_file, box=None):
     print 'LOADING IMAGE FROM FILE: {}'.format(image_file)
     img = imread(image_file)
@@ -19,8 +24,9 @@ def grabcut(image_file, box=None):
     # Initialize segmentation map to bounding box, foreground = 1, background = 0
     seg_map = np.zeros((img.shape[0], img.shape[1]))
     seg_map[(box['y_min'] + 1):box['y_max'], (box['x_min'] + 1):box['x_max']] = 1
-    # initialize components with k-means, from lecture notes
-    initial = k_means(img,box)
+    
+    # Initialize GMM components with k-means
+    initial = quick_k_means(img, seg_map)
     scipy.misc.imsave('/Users/Jasper/Desktop/test.png',initial)
     gmm = fit_gmm(img, seg_map)
 
@@ -28,6 +34,40 @@ def grabcut(image_file, box=None):
 
 def preprocess(img):
     return img
+
+def quick_k_means(img, seg_map, k=5):
+    foreground = img[seg_map == 1]
+    background = img[seg_map == 0]
+
+    fg_mu = foreground[np.random.choice(foreground.shape[0], k), :]
+    bg_mu = background[np.random.choice(background.shape[0], k), :]
+    avg_centroid_change = float('Inf')
+
+    while avg_centroid_change > KMEANS_CONVERGENCE:
+        fg_dist = cdist(foreground, fg_mu, metric='euclidean')
+        bg_dist = cdist(background, bg_mu, metric='euclidean')
+
+        fg_ass = np.argmin(fg_dist, axis=1)
+        bg_ass = np.argmin(bg_dist, axis=1)
+
+        new_fg_mu = np.zeros_like(fg_mu)
+        new_bg_mu = np.zeros_like(bg_mu)
+
+        for i in xrange(k):
+            new_fg_mu[i] = np.mean(foreground[fg_ass == i], axis=0)
+            new_bg_mu[i] = np.mean(background[bg_ass == i], axis=0)
+
+        avg_centroid_change = np.sqrt(np.sum(np.square(fg_mu - new_fg_mu), axis=1))
+        avg_centroid_change += np.sqrt(np.sum(np.square(fg_mu - new_fg_mu), axis=1))
+        avg_centroid_change = np.mean(avg_centroid_change) / 2
+
+        print "AVERAGE CENTROID CHANGE: {}".format(avg_centroid_change)
+
+        fg_mu = new_fg_mu
+        bg_mu = new_bg_mu
+
+    return fg_ass, bg_ass
+
 
 def select_bounding_box(img):
     plt.imshow(img)
@@ -125,6 +165,7 @@ def jaccardSimiliarity(segmentation,truth):
     intersection = np.sum(np.sum(np.where(total == 2, 1, 0)))
     union = np.sum(np.sum(np.where(total == 1 or total == 2, 1, 0)))
     return float(intersection)/float(union)*100
+
 # INITIALIZE THE FOREGROUND & BACKGROUND GAUSSIAN MIXTURE MODEL (GMM)
 # 
 # while CONVERGENCE
