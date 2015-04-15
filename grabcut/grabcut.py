@@ -60,32 +60,29 @@ def estimate_segmentation(img, fg_gmm, bg_gmm, seg_map):
 def get_unary(img, gmms):
     # Find closest component in gmm set
     # Calculate log PDF
-#Using equation 9 from Grabcut paper
-    diff = np.zeros((img.shape[0],img.shape[1],len(gmms)))
-    for i,component in enumerate(gmms):
-        temp = np.square(img - component['mean'])
-        diff[:,:,i] = np.sum(temp,axis = 2)
-    k = np.argmin(diff, axis = 2)
-    print k.shape
-    flat = k.flatten()
+    #determine most likely component
     x = tuple(map(tuple,img))
     imgData = [ ] 
     for a in x:
         imgData.extend(a)
-    #cov matrix
-    cov = [ ]
-    mu = [ ]
-    for element in flat:
-        cov.append(gmms[element]['cov'])
-        mu.append(gmms[element]['mean'])
-    sub = np.subtract(imgData,mu)
-    print sub.shape
-    piece1 = -0.5*(np.log(2*np.pi)+np.log(np.linalg.det(cov)))
-    piece2 = [ ]
-    for y,z  in zip(sub,cov):
-        piece2.extend( -0.5*(np.dot(np.dot(y,np.linalg.inv(z)),y)))
-    probs = np.add(piece1,piece2)
-    return probs, k
+    maximum = [ ]
+    for components in gmms:
+        cov = components['cov']
+        mu = components['mean']
+        weight = components['size']
+        piece1 = -np.log(weight)+0.5*np.log(np.linalg.det(cov))
+        piece2 = np.dot(imgData - mu,np.linalg.inv(cov))
+        temp = [ ]
+        for i, j in zip(piece2, imgData - mu):
+            temp.append(np.dot(i,np.transpose(j)))
+        maximum.append(piece1+temp)
+    param = np.max(np.array(maximum),axis = 0)
+    assignments = np.argmax(np.array(maximum),axis = 0)
+    for elements in assignments:
+        temp.append(gmms[elements]['mean'])
+    assign = np.reshape(temp,(img.shape[0],img.shape[1]))
+    unary = np.reshape(param,(img.shape[0],img.shape[1]))
+    return unary, assign
 
 def quick_k_means(foreground, background, k=5):
     fg_mu = foreground[np.random.choice(foreground.shape[0], k), :]
