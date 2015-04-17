@@ -119,12 +119,11 @@ def get_unary(img, gmms):
         for i, j in zip(piece2, imgData - mu):
             temp.append(np.dot(i,np.transpose(j)))
         maximum.append(piece1+temp)
-    param = np.max(np.array(maximum),axis = 0)
+    unary = np.max(np.array(maximum),axis = 0)
+    assign = [ ]
     assignments = np.argmax(np.array(maximum),axis = 0)
     for elements in assignments:
-        temp.append(gmms[elements]['mean'])
-    assign = np.reshape(temp,(img.shape[0],img.shape[1]))
-    unary = np.reshape(param,(img.shape[0],img.shape[1]))
+        assign.append(gmms[elements]['mean'])
     return unary, assign
 
 def quick_k_means(foreground, background, k=5):
