@@ -1,14 +1,17 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pdb
-from scipy.misc import imread
-from scipy.spatial.distance import cdist
 import random
 import scipy
 import sys
+from scipy.misc import imread
+from scipy.spatial.distance import cdist
+
 
 KMEANS_CONVERGENCE = 1.0
 MAX_NUM_ITERATIONS = 5
+
+GAMMA = 50
 
 def grabcut(image_file, box=None):
     print 'LOADING IMAGE FROM FILE: {}'.format(image_file)
@@ -52,10 +55,50 @@ def estimate_segmentation(img, fg_gmm, bg_gmm, seg_map):
 
     # Calculate pairwise values
         # Use subimages shifted up, down, left, right
+    pair_pot = get_pairwise(img)
     # Construct graph and run mincut on it
     # Create bit map of result and return it
 
     return seg_map, fg_ass, bg_ass
+
+def get_pairwise(img):
+    H, W, C = img.shape
+
+    shifted_imgs = shift(img)
+    pairwise_dist = np.zeros((4, H, W, C))
+
+    for i in xrange(4):
+        pairwise_dist[i] = np.sum((img - shifted_imgs[i]) ** 2, axis=2)
+
+    beta = 1.0 / (2 * np.mean(pairwise_dist))
+
+    pairwise_dist = np.exp(-1 * beta * pairwise_dist)
+    pairwise_dist *= GAMMA
+
+    return pairwise_dist
+
+def shift(img):
+    H, W, C = img.shape
+
+    up = np.array(img)
+    up[:H-1, : ,:] = img[1:, :, :]
+
+    down = np.array(img)
+    down[1:, :, :] = img[:H-1, :, :]
+
+    left = np.array(img)
+    left[:, :W-1, :] = img[:, 1:, :]
+
+    right = np.array(img)
+    left[:, 1:, :] = img[:, :W-1, :]
+
+    shifted_imgs = np.zeros((4, H, W, C))
+    shifted_imgs[0] = up
+    shifted_imgs[1] = down
+    shifted_imgs[2] = left
+    shifted_imgs[3] = right
+
+    return shifted_imgs
 
 def get_unary(img, gmms):
     # Find closest component in gmm set
@@ -227,18 +270,6 @@ def jaccard_similarity(segmentation,truth):
     intersection = np.sum(np.sum(np.where(total == 2, 1, 0)))
     union = np.sum(np.sum(np.where(total == 1 or total == 2, 1, 0)))
     return float(intersection)/float(union)*100
-
-# INITIALIZE THE FOREGROUND & BACKGROUND GAUSSIAN MIXTURE MODEL (GMM)
-# 
-# while CONVERGENCE
-#     
-#     UPDATE THE GAUSSIAN MIXTURE MODELS
-#     
-#     MAX-FLOW/MIN-CUT ENERGY MINIMIZATION
-#     
-#     IF THE ENERGY DOES NOT CONVERGE
-#         
-#         break;
 
 if __name__ == '__main__':
     import sys
