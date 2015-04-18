@@ -4,8 +4,9 @@ import numpy as np
 import pdb
 import random
 import scipy
-import sys
+from os import listdir
 from scipy.misc import imread
+from scipy.misc import imsave
 from scipy.spatial.distance import cdist
 
 
@@ -22,20 +23,28 @@ STRUCTURES = {
     'LEFT': np.array([[0, 0, 0], [1, 0, 0], [0, 0, 0]]),
     'RIGHT': np.array([[0, 0, 0], [0, 0, 1], [0, 0, 0]]),
 }
-
+def runAlgorithm( ):
+    bboxes = [f for f in listdir('./bboxes')]
+    data = [f for f in listdir('./data')]
+    ground_truth = [f for f in listdir('./ground_truth')]
+    output = open('./results.txt','wb')
+    for box, img, truth in zip(bboxes,data,ground_truth):
+        f = open('./bboxes/'+box) 
+        bounds = f.readline().split()
+        bounding = { }
+        bounding['xmin'] = int(bounds[0])
+        bounding['ymin'] = int(bounds[1])
+        bounding['xmax'] = int(bounds[2])
+        bounding['ymax'] = int(bounds[3])
+        image = imread('./data/'+img)
+        gtruth = imread('./ground_truth/'+truth)
+        seg = grabcut(image, bounding)
+        similarity = jaccard_similarity(seg, gtruth)
+        imsave('./output/'+img,np.where(seg==0,0,255))
+        output.write(box+'\t'+similarity+'\n')
+    output.close()
 def grabcut(image_file, box=None):
-    print 'LOADING IMAGE FROM FILE: {}'.format(image_file)
-    img = imread(image_file)
-    print 'IMAGE SHAPE: {}'.format(img.shape)
-
-    # For now, hard-code bounding box for banana1.jpg
-    box = {
-        'x_min': 16,
-        'y_min': 20,
-        'x_max': 620,
-        'y_max': 436,
-    }
-
+    img = image_file
     # Allow user to select bounding box if not provided
     if box is None:
         box = select_bounding_box(img)
@@ -198,7 +207,7 @@ def quick_k_means(foreground, background, k=5):
 def fit_gmm(fg, bg, fg_ass, bg_ass, k=5):
     fg_gmms, bg_gmms = [], []
 
-    pdb.set_trace()
+#    pdb.set_trace()
 
     for i in xrange(k):
         fg_cluster = fg[fg_ass == i]
@@ -256,4 +265,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1:
         grabcut(sys.argv[1])
     else:
-        grabcut("./data/banana1.bmp")
+        runAlgorithm()
