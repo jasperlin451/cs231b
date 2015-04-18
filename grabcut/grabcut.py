@@ -28,6 +28,7 @@ def grabcut(image_file, box=None):
     img = imread(image_file)
     print 'IMAGE SHAPE: {}'.format(img.shape)
 
+    # For now, hard-code bounding box for banana1.jpg
     box = {
         'x_min': 16,
         'y_min': 20,
@@ -138,33 +139,31 @@ def shift(img):
 
     return shifted_imgs
 
-def get_unary(img, gmms):
+def get_unary(img, gmm):
+    K = len(gmm)
     H, W, C = img.shape
 
-    x = tuple(map(tuple,img))
-    imgData = [ ] 
-    for a in x:
-        imgData.extend(a)
-    maximum = [ ]
-    for components in gmms:
-        cov = components['cov']
-        mu = components['mean']
-        weight = components['size']
-        piece1 = -np.log(weight)+0.5*np.log(np.linalg.det(cov))
-        piece2 = np.dot(imgData - mu,np.linalg.inv(cov))
-        temp = [ ]
-        for i, j in zip(piece2, imgData - mu):
-            temp.append(np.dot(i,np.transpose(j)))
-        maximum.append(piece1+temp)
-    unary = np.max(np.array(maximum),axis = 0)
-    assign = [ ]
-    assignments = np.argmax(np.array(maximum),axis = 0)
-    for elements in assignments:
-        assign.append(gmms[elements]['mean'])
+    potentials = np.zeros((K, H, W))
 
-    unary = np.reshape(unary, (H, W))
+    for k, gaussian in enumerate(gmm):
+        cov = gaussian['cov']
+        mu_img = img - np.reshape(gaussian['mean'], (1, 1, 3))
 
-    return unary, assign
+        piece1 = -np.log(gaussian['size']) + 0.5 * np.log(np.linalg.det(cov))
+        temp = np.einsum('ijk,il', np.transpose(mu_img), np.linalg.inv(cov))
+        
+        piece2 = np.zeros((H, W))
+        
+        for i in xrange(H):
+            for j in xrange(W):
+                piece2[i, j] = np.dot(temp[j, i], mu_img[i, j])
+        
+        potentials[k] = piece1 + piece2
+    
+    unary = np.max(np.array(potentials), axis=0)
+    assignments = np.argmax(np.array(potentials), axis=0)
+
+    return unary, assignments
 
 def quick_k_means(foreground, background, k=5):
     fg_mu = foreground[np.random.choice(foreground.shape[0], k), :]
@@ -198,6 +197,8 @@ def quick_k_means(foreground, background, k=5):
 
 def fit_gmm(fg, bg, fg_ass, bg_ass, k=5):
     fg_gmms, bg_gmms = [], []
+
+    pdb.set_trace()
 
     for i in xrange(k):
         fg_cluster = fg[fg_ass == i]
