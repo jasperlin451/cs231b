@@ -14,6 +14,8 @@ MAX_NUM_ITERATIONS = 5
 
 GAMMA = 50
 
+SHIFT_DIRECTIONS = ['UP', 'DOWN', 'LEFT', 'RIGHT']
+
 STRUCTURES = {
     'UP': np.array([[0, 1, 0], [0, 0, 0], [0, 0, 0]]),
     'DOWN': np.array([[0, 0, 0], [0, 0, 0], [0, 1, 0]]),
@@ -88,9 +90,7 @@ def create_graph(fg_unary, bg_unary, pair_pot):
     graph.add_grid_tedges(nodes, fg_unary, bg_unary)
 
     # Add pairwise potentials
-    shift_dirs = ['UP', 'DOWN', 'LEFT', 'RIGHT']
-
-    for i, direction in enumerate(shift_dirs):
+    for i, direction in enumerate(SHIFT_DIRECTIONS):
         graph.add_grid_edges(nodes, weights=pair_pot[i], structure=STRUCTURES[direction], symmetric=False)
 
     return graph, nodes
@@ -241,67 +241,6 @@ def select_bounding_box(img):
     plt.show()
 
     return box
-
-def cluster_points(color, mu):
-    points = len(color)
-    colorList = np.array(color)
-    colors = np.zeros((colorList.shape[0],3,len(mu)))
-    mus = np.zeros_like(colors)
-    for i in range(len(mu)):
-        colors[:,:,i] = colorList
-        mus[:,:,i] = np.tile(mu[i],(points,1))
-    difference = np.sum(np.square(colors - mus),axis = 1)
-    index = np.argmin(difference,axis=1)
-    clusters1 = { }
-    clusters2 = { }
-    for j,k,z in zip(index,range(points),color):
-        try:
-            clusters1[tuple(mu[j])].append(k)
-            clusters2[tuple(mu[j])].append(z)
-        except KeyError:
-            clusters1[tuple(mu[j])] = [k]
-            clusters2[tuple(mu[j])] = [z]
-    return clusters1, clusters2
-
-def reevaluate_centers(clusters):
-    newmu = [ ]
-    for k in clusters:
-        total = np.zeros((1,3))
-        for a in clusters[k]:
-            total += a
-        total /= len(clusters[k])
-        newmu.append(total)
-    return [a[0] for a in newmu]
-
-def has_converged(mu, oldmu):
-    return set([tuple(a) for a in mu]) == set([tuple(a) for a in oldmu])
-
-def k_means(img, box, k=5):
-    y_min = box['y_min']
-    y_max = box['y_max']
-    x_min = box['x_min']+1
-    x_max = box['x_max']
-    colorList = [ ]
-    for y in range(int(y_min),int(y_max)):
-        for x in range(int(x_min),int(x_max)):
-            colorList.append(img[y,x,:])
-    oldmu = [a for a in random.sample(colorList,k)]
-    mu = [a for a in random.sample(colorList,k)]
-    counter = 1
-    while not has_converged(mu, oldmu):
-        print counter
-        counter += 1
-        oldmu = mu
-        #assign points to clusters
-        clusters1, clusters2 = cluster_points(colorList, mu)
-        #reevaluate centers
-        mu = reevaluate_centers(clusters2)
-    initial = np.zeros(img.shape)
-    width = x_max - x_min
-    for i,j in enumerate(clusters1.keys()):
-        for k in clusters1[j]:
-            initial[int(k/width)+y_min,k%width+x_min] = (i+1)*30
-    return initial
 
 def jaccard_similarity(segmentation,truth):
     truth = np.where(truth == 255, 1, 0)
