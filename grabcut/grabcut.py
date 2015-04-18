@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import maxflow
 import numpy as np
 import pdb
 import random
@@ -13,10 +14,24 @@ MAX_NUM_ITERATIONS = 5
 
 GAMMA = 50
 
+STRUCTURES = {
+    'UP': np.array([[0, 1, 0], [0, 0, 0], [0, 0, 0]]),
+    'DOWN': np.array([[0, 0, 0], [0, 0, 0], [0, 1, 0]]),
+    'LEFT': np.array([[0, 0, 0], [1, 0, 0], [0, 0, 0]]),
+    'RIGHT': np.array([[0, 0, 0], [0, 0, 1], [0, 0, 0]]),
+}
+
 def grabcut(image_file, box=None):
     print 'LOADING IMAGE FROM FILE: {}'.format(image_file)
     img = imread(image_file)
     print 'IMAGE SHAPE: {}'.format(img.shape)
+
+    box = {
+        'x_min': 16,
+        'y_min': 20,
+        'x_max': 620,
+        'y_max': 436,
+    }
 
     # Allow user to select bounding box if not provided
     if box is None:
@@ -54,18 +69,41 @@ def estimate_segmentation(img, fg_gmm, bg_gmm, seg_map):
     bg_unary, bg_ass = get_unary(img, bg_gmm)
 
     # Calculate pairwise values
-        # Use subimages shifted up, down, left, right
     pair_pot = get_pairwise(img)
+
     # Construct graph and run mincut on it
+    pot_graph, nodes = create_graph(fg_unary, bg_unary, pair_pot)
+    pot_graph.maxflow()
+
     # Create bit map of result and return it
+    seg_map = segment(pot_graph, nodes)
 
     return seg_map, fg_ass, bg_ass
+
+def create_graph(fg_unary, bg_unary, pair_pot):
+    graph = maxflow.Graph[float]()
+    nodes = graph.add_grid_nodes(fg_unary.shape)
+
+    # Add unary potentials
+    graph.add_grid_tedges(nodes, fg_unary, bg_unary)
+
+    # Add pairwise potentials
+    shift_dirs = ['UP', 'DOWN', 'LEFT', 'RIGHT']
+
+    for i, direction in enumerate(shift_dirs):
+        graph.add_grid_edges(nodes, weights=pair_pot[i], structure=STRUCTURES[direction], symmetric=False)
+
+    return graph, nodes
+
+def segment(graph, nodes):
+    segments = graph.get_grid_segments(nodes)
+    return np.int_(np.logical_not(segments))
 
 def get_pairwise(img):
     H, W, C = img.shape
 
     shifted_imgs = shift(img)
-    pairwise_dist = np.zeros((4, H, W, C))
+    pairwise_dist = np.zeros((4, H, W))
 
     for i in xrange(4):
         pairwise_dist[i] = np.sum((img - shifted_imgs[i]) ** 2, axis=2)
@@ -90,9 +128,9 @@ def shift(img):
     left[:, :W-1, :] = img[:, 1:, :]
 
     right = np.array(img)
-    left[:, 1:, :] = img[:, :W-1, :]
+    right[:, 1:, :] = img[:, :W-1, :]
 
-    shifted_imgs = np.zeros((4, H, W, C))
+    shifted_imgs = np.zeros((4, H, W, C), dtype='uint32')
     shifted_imgs[0] = up
     shifted_imgs[1] = down
     shifted_imgs[2] = left
@@ -101,9 +139,8 @@ def shift(img):
     return shifted_imgs
 
 def get_unary(img, gmms):
-    # Find closest component in gmm set
-    # Calculate log PDF
-    #determine most likely component
+    H, W, C = img.shape
+
     x = tuple(map(tuple,img))
     imgData = [ ] 
     for a in x:
@@ -124,6 +161,9 @@ def get_unary(img, gmms):
     assignments = np.argmax(np.array(maximum),axis = 0)
     for elements in assignments:
         assign.append(gmms[elements]['mean'])
+
+    unary = np.reshape(unary, (H, W))
+
     return unary, assign
 
 def quick_k_means(foreground, background, k=5):
