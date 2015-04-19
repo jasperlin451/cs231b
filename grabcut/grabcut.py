@@ -57,7 +57,7 @@ def test_grabcut():
         mean_accuracy += accuracy
         
         similarity = 0.0
-        #similarity = jaccard_similarity(seg, ground_truth)
+        similarity = jaccard_similarity(seg, ground_truth)
 
         print 'OBTAINED FINAL ACCURACY: {}, JACCARD SIMILARITY: {}'.format(accuracy, similarity)
         imsave('./output/' + img_path.split('/')[2], np.where(seg == 0, 0, 255))
@@ -317,10 +317,11 @@ def select_bounding_box(img):
     return box
 
 def jaccard_similarity(segmentation,truth):
-    truth = np.where(truth == 255, 1, 0)
     total = segmentation + truth
+    temp = np.where(total == 2,1,total)
+    temp = np.where(temp == 1,1,0)
     intersection = np.sum(np.sum(np.where(total == 2, 1, 0)))
-    union = np.sum(np.sum(np.where(total == 1 or total == 2, 1, 0)))
+    union = np.sum(np.sum(temp))
     return float(intersection)/float(union)*100
 
 if __name__ == '__main__':
