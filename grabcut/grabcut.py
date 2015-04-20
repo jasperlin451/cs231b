@@ -328,6 +328,11 @@ if __name__ == '__main__':
     import sys
 
     if len(sys.argv) > 1:
-        grabcut(sys.argv[1])
+        seg = grabcut(sys.argv[1])
+        ground_truth = imread(sys.argv[2])
+        ground_truth[ground_truth > 0] = 1
+        accuracy = get_accuracy(seg, ground_truth)
+        similarity = jaccard_similarity(seg, ground_truth)
+        print 'OBTAINED FINAL ACCURACY: {}, JACCARD SIMILARITY: {}'.format(accuracy, similarity)
     else:
         test_grabcut()
