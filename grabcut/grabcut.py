@@ -30,7 +30,7 @@ def test_grabcut():
 
     output = open('./results.txt','wb')
     mean_accuracy = 0.0
-
+    mean_similarity = 0.0
     for box_path, img_path, truth_path in zip(box_list, data_list, truth_list):
         with open(box_path) as box_file:
             bounds = box_file.readline().split()
@@ -55,15 +55,15 @@ def test_grabcut():
         accuracy = get_accuracy(seg, ground_truth)
         mean_accuracy += accuracy
         
-        similarity = 0.0
         similarity = jaccard_similarity(seg, ground_truth)
-
+        mean_similarity += similarity
         print 'OBTAINED FINAL ACCURACY: {}, JACCARD SIMILARITY: {}'.format(accuracy, similarity)
         imsave('./output/' + img_path.split('/')[2], np.where(seg == 0, 0, 255))
         output.write('{}\t{}\n'.format(box_path, similarity))
 
     mean_accuracy /= len(data_list)
-    print 'MEAN ACCURACY: {}'.format(mean_accuracy)
+    mean_similarity /= len(data_list)
+    print 'MEAN ACCURACY: {}, MEAN SIMILARITY: {}'.format(mean_accuracy,mean_similarity)
 
     output.close()
 
@@ -102,7 +102,6 @@ def grabcut(img, box=None):
         print 'AT ITERATION {}, {} FOREGROUND / {} BACKGROUND'.format(i + 1,fg.shape[0], bg.shape[0])
         i += 1
     return seg_map
-
 
 
 def preprocess(img):
@@ -226,11 +225,11 @@ def get_unary(img, gmm):
         potentials[k] = piece1 + piece2
         log_pdfs[k] += -1.0 * piece2
     
-    try:
-        unary = np.max(np.array(potentials), axis=0)
-        assignments = np.argmax(np.array(log_pdfs), axis=0)
-    except:
-        pdb.set_trace()
+    assignments = np.argmax(np.array(log_pdfs), axis=0)
+    unary = np.zeros((H,W))
+    for i in xrange(H):
+        for j in xrange(W):
+            unary[i,j] = potentials[assignments[i,j],i,j]
 
     print 'CALCULATING UNARY POTENTIALS...'
 
