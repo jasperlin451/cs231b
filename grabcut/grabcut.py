@@ -10,7 +10,7 @@ import time
 
 
 KMEANS_CONVERGENCE = 1.0
-MAX_NUM_ITERATIONS = 5
+MAX_NUM_ITERATIONS = 7
 
 GAMMA = 50
 
@@ -34,7 +34,6 @@ def test_grabcut():
     for box_path, img_path, truth_path in zip(box_list, data_list, truth_list):
         with open(box_path) as box_file:
             bounds = box_file.readline().split()
-
             box = {
                 'x_min': int(bounds[0]),
                 'y_min': int(bounds[1]),
@@ -89,17 +88,22 @@ def grabcut(img, box=None):
 
     # Initialize GMM components with k-means
     fg_ass, bg_ass = quick_k_means(fg, bg)
-    
     # Iteratively refine segmentation from initialization
-    for i in xrange(MAX_NUM_ITERATIONS):
+    change = 1
+    i = 0
+    oldshape = fg.shape[0]
+    while change> 0.01:
         fg_gmm, bg_gmm = fit_gmm(fg, bg, fg_ass, bg_ass)
-        seg_map, fg_ass, bg_ass = estimate_segmentation(img, fg_gmm, bg_gmm, seg_map, box)
+        seg_map, fg_ass, bg_ass= estimate_segmentation(img, fg_gmm, bg_gmm, seg_map, box)
         fg = img[seg_map == 1]
         bg = img[seg_map == 0]
-
-        print 'AT ITERATION {}, {} FOREGROUND / {} BACKGROUND'.format(i + 1, fg.shape[0], bg.shape[0])
-
+        change = abs(oldshape-fg.shape[0])/float(oldshape)
+        oldshape = fg.shape[0]
+        print 'AT ITERATION {}, {} FOREGROUND / {} BACKGROUND'.format(i + 1,fg.shape[0], bg.shape[0])
+        i += 1
     return seg_map
+
+
 
 def preprocess(img):
     return img
@@ -116,7 +120,6 @@ def estimate_segmentation(img, fg_gmm, bg_gmm, seg_map, box):
     fg_unary = fg_unary[box['y_min']:box['y_max'], box['x_min']:box['x_max']]
     bg_unary = bg_unary[box['y_min']:box['y_max'], box['x_min']:box['x_max']]
     pair_pot = pair_pot[:, box['y_min']:box['y_max'], box['x_min']:box['x_max']]
-
     # Construct graph and run mincut on it
     pot_graph, nodes = create_graph(fg_unary, bg_unary, pair_pot)
     pot_graph.maxflow()
