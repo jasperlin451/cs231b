@@ -11,7 +11,7 @@ import time
 
 KMEANS_CONVERGENCE = 1.0
 MAX_NUM_ITERATIONS = 7
-
+THRESHOLD = 0.01
 GAMMA = 50
 
 SHIFT_DIRECTIONS = ['UP', 'DOWN', 'LEFT', 'RIGHT']
@@ -92,7 +92,7 @@ def grabcut(img, box=None):
     change = 1
     i = 0
     oldshape = fg.shape[0]
-    while change> 0.01:
+    while change> THRESHOLD:
         fg_gmm, bg_gmm = fit_gmm(fg, bg, fg_ass, bg_ass)
         seg_map, fg_ass, bg_ass= estimate_segmentation(img, fg_gmm, bg_gmm, seg_map, box)
         fg = img[seg_map == 1]
