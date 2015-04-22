@@ -10,17 +10,18 @@ import time
 
 
 KMEANS_CONVERGENCE = 1.0
-MAX_NUM_ITERATIONS = 7
+MAX_NUM_ITERATIONS = 10
 THRESHOLD = 0.01
 GAMMA = 50
 
-SHIFT_DIRECTIONS = ['UP', 'DOWN', 'LEFT', 'RIGHT']
+#SHIFT_DIRECTIONS = ['UP', 'DOWN', 'LEFT', 'RIGHT']
 
+SHIFT_DIRECTIONS = ['DOWN', 'RIGHT']
 STRUCTURES = {
-    'UP': np.array([[0, 1, 0], [0, 0, 0], [0, 0, 0]]),
-    'DOWN': np.array([[0, 0, 0], [0, 0, 0], [0, 1, 0]]),
-    'LEFT': np.array([[0, 0, 0], [1, 0, 0], [0, 0, 0]]),
-    'RIGHT': np.array([[0, 0, 0], [0, 0, 1], [0, 0, 0]]),
+    'DOWN': np.array([[0, 1, 0], [0, 0, 0], [0, 0, 0]]),
+#    'UP': np.array([[0, 0, 0], [0, 0, 0], [0, 1, 0]]),
+    'RIGHT': np.array([[0, 0, 0], [1, 0, 0], [0, 0, 0]]),
+#    'LEFT': np.array([[0, 0, 0], [0, 0, 1], [0, 0, 0]]),
 }
 
 def test_grabcut():
@@ -59,11 +60,9 @@ def test_grabcut():
         mean_similarity += similarity
         print 'OBTAINED FINAL ACCURACY: {}, JACCARD SIMILARITY: {}'.format(accuracy, similarity)
         out = np.zeros(img.shape)
-        for i in range(img.shape[0]):
-            for j in range(img.shape[1]):
-                if seg[i,j] == 1:
-                    out[i,j,:] = img[i,j,:]
-
+        stacked = np.tile(np.reshape(seg,(seg.shape[0],seg.shape[1],1)),(1,1,3))
+        print stacked.shape
+        out = np.where(stacked == [0,0,0],[0,0,0],img)
         imsave('./output/' + img_path.split('/')[2], out)
         output.write('{}\t{}\n'.format(box_path, similarity))
 
@@ -98,7 +97,7 @@ def grabcut(img, box=None):
     change = 1
     i = 0
     oldshape = fg.shape[0]
-    while change> THRESHOLD:
+    while change> THRESHOLD and i<MAX_NUM_ITERATIONS:
         fg_gmm, bg_gmm = fit_gmm(fg, bg, fg_ass, bg_ass)
         seg_map, fg_ass, bg_ass= estimate_segmentation(img, fg_gmm, bg_gmm, seg_map, box)
         fg = img[seg_map == 1]
@@ -119,12 +118,9 @@ def estimate_segmentation(img, fg_gmm, bg_gmm, seg_map, box):
     bg_unary, bg_ass = get_unary(img, bg_gmm)
 
     # Calculate pairwise values
-    pair_pot = get_pairwise(img)
+    pair_pot = get_pairwise(img,seg_map)
 
-    # Remove portion outside bounding box
-    fg_unary = fg_unary[box['y_min']:box['y_max'], box['x_min']:box['x_max']]
-    bg_unary = bg_unary[box['y_min']:box['y_max'], box['x_min']:box['x_max']]
-    pair_pot = pair_pot[:, box['y_min']:box['y_max'], box['x_min']:box['x_max']]
+    fg_unary, bg_unary = adjust_outside_box(fg_unary,bg_unary,box)
     # Construct graph and run mincut on it
     pot_graph, nodes = create_graph(fg_unary, bg_unary, pair_pot)
     pot_graph.maxflow()
@@ -132,23 +128,25 @@ def estimate_segmentation(img, fg_gmm, bg_gmm, seg_map, box):
     # Create bit map of result and return it
     box_seg = segment(pot_graph, nodes)
     
-    seg_map = np.zeros((img.shape[0], img.shape[1]), dtype='int32')
-    seg_map[box['y_min']:box['y_max'], box['x_min']:box['x_max']] = box_seg
+    #seg_map = np.zeros((img.shape[0], img.shape[1]), dtype='int32')
+    #seg_map[box['y_min']:box['y_max'], box['x_min']:box['x_max']] = box_seg
 
-    return seg_map, fg_ass[seg_map == 1], bg_ass[seg_map == 0]
+    return box_seg, fg_ass[box_seg == 1], bg_ass[box_seg == 0]
 
 def adjust_outside_box(fg_unary, bg_unary, box):
-    fg_unary[:box['y_min'], :] = -100000
-    bg_unary[:box['y_min'], :] = 100000
+    fg_unary[:box['y_min'], :] = 1e15
+    bg_unary[:box['y_min'], :] = -1e15
 
-    fg_unary[:, :box['x_min']] = -100000
-    bg_unary[:, :box['x_min']] = 100000
+    fg_unary[:, :box['x_min']] = 1e15
+    bg_unary[:, :box['x_min']] = -1e15
 
-    fg_unary[box['y_max']:, :] = -100000
-    bg_unary[box['y_max']:, :] = 100000
+    fg_unary[box['y_max']:, :] = 1e15
+    bg_unary[box['y_max']:, :] = -1e15
 
-    fg_unary[:, box['x_max']:] = -100000
-    bg_unary[:, box['x_max']:] = 100000
+    fg_unary[:, box['x_max']:] = 1e15
+    bg_unary[:, box['x_max']:] = -1e15
+    
+    return fg_unary, bg_unary
 
 def create_graph(fg_unary, bg_unary, pair_pot):
     graph = maxflow.Graph[float]()
@@ -167,21 +165,47 @@ def segment(graph, nodes):
     segments = graph.get_grid_segments(nodes)
     return (np.int_(np.logical_not(segments)) - 1) * -1
 
-def get_pairwise(img):
+def get_pairwise(img,seg):
     H, W, C = img.shape
 
     shifted_imgs = shift(img)
+    shifted_seg = shift_seg(seg)
     pairwise_dist = np.zeros((4, H, W))
-
-    for i in xrange(4):
-        pairwise_dist[i] = np.sqrt(np.sum((img - shifted_imgs[i]) ** 2, axis=2))
-
-    beta = 1.0 / (2 * np.mean(pairwise_dist))
+    temp2 = np.zeros((2,H,W))
+    for i in xrange(2):
+        temp = np.sum((img - shifted_imgs[i]) ** 2, axis=2)
+        temp2[i]= temp
+        pair = np.where(seg - shifted_seg[i] == 1,0,temp)
+        pairwise_dist[i] = pair
+    beta = 1.0 / (2 * np.mean(temp2))
 
     pairwise_dist = np.exp(-1 * beta * pairwise_dist)
     pairwise_dist *= GAMMA
 
     return pairwise_dist
+
+def shift_seg(img):
+    H, W = img.shape
+
+    up = np.array(img)
+    up[:H-1, : ] = img[1:, :]
+
+    down = np.array(img)
+    down[1:, :] = img[:H-1, :]
+
+    left = np.array(img)
+    left[:, :W-1] = img[:, 1:]
+
+    right = np.array(img)
+    right[:, 1:] = img[:, :W-1]
+
+    shifted_imgs = np.zeros((2,H,W))
+    #shifted_imgs[0] = up
+    shifted_imgs[0] = down
+    #shifted_imgs[2] = left
+    shifted_imgs[1] = right
+
+    return shifted_imgs
 
 def shift(img):
     H, W, C = img.shape
@@ -198,11 +222,11 @@ def shift(img):
     right = np.array(img)
     right[:, 1:, :] = img[:, :W-1, :]
 
-    shifted_imgs = np.zeros((4, H, W, C), dtype='uint32')
-    shifted_imgs[0] = up
-    shifted_imgs[1] = down
-    shifted_imgs[2] = left
-    shifted_imgs[3] = right
+    shifted_imgs = np.zeros((2, H, W, C), dtype='uint32')
+    #shifted_imgs[0] = up
+    shifted_imgs[0] = down
+    #shifted_imgs[2] = left
+    shifted_imgs[1] = right
 
     return shifted_imgs
 
