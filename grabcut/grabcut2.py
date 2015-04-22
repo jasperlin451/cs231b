@@ -61,7 +61,6 @@ def test_grabcut():
         print 'OBTAINED FINAL ACCURACY: {}, JACCARD SIMILARITY: {}'.format(accuracy, similarity)
         out = np.zeros(img.shape)
         stacked = np.tile(np.reshape(seg,(seg.shape[0],seg.shape[1],1)),(1,1,3))
-        print stacked.shape
         out = np.where(stacked == [0,0,0],[0,0,0],img)
         imsave('./output/' + img_path.split('/')[2], out)
         output.write('{}\t{}\n'.format(box_path, similarity))
@@ -72,9 +71,6 @@ def test_grabcut():
 
     output.close()
 
-def get_accuracy(seg_map, ground_truth):
-    correct = (seg_map + ground_truth - 1) ** 2
-    return np.mean(correct)
 
 def grabcut(img, box=None):
     # Allow user to select bounding box if not provided
@@ -97,7 +93,7 @@ def grabcut(img, box=None):
     change = 1
     i = 0
     oldshape = fg.shape[0]
-    while change> THRESHOLD and i<MAX_NUM_ITERATIONS:
+    while i<5 or (change> THRESHOLD and i<MAX_NUM_ITERATIONS):
         fg_gmm, bg_gmm = fit_gmm(fg, bg, fg_ass, bg_ass)
         seg_map, fg_ass, bg_ass= estimate_segmentation(img, fg_gmm, bg_gmm, seg_map, box)
         fg = img[seg_map == 1]
@@ -170,18 +166,16 @@ def get_pairwise(img,seg):
 
     shifted_imgs = shift(img)
     shifted_seg = shift_seg(seg)
-    pairwise_dist = np.zeros((4, H, W))
+    pairwise_dist = np.zeros((2, H, W))
     temp2 = np.zeros((2,H,W))
     for i in xrange(2):
         temp = np.sum((img - shifted_imgs[i]) ** 2, axis=2)
         temp2[i]= temp
-        pair = np.where(seg - shifted_seg[i] == 1,0,temp)
-        pairwise_dist[i] = pair
+        pairwise_dist[i] = np.where(seg - shifted_seg[i] == 1,0,temp)
     beta = 1.0 / (2 * np.mean(temp2))
 
     pairwise_dist = np.exp(-1 * beta * pairwise_dist)
     pairwise_dist *= GAMMA
-
     return pairwise_dist
 
 def shift_seg(img):
@@ -245,15 +239,12 @@ def get_unary(img, gmm):
 
         piece1 = -np.log(gaussian['size']) + 0.5 * np.log(np.linalg.det(cov))
         temp = np.einsum('ijk,il', np.transpose(mu_img), np.linalg.inv(cov))
-        
-        piece2 = np.zeros((H, W))
-        
+        piece2 = np.zeros((H, W))                           
         for i in xrange(H):
             for j in xrange(W):
-                piece2[i, j] = np.dot(temp[j, i], mu_img[i, j])
-        
-        potentials[k] = piece1 + piece2
-        log_pdfs[k] += -1.0 * piece2
+                piece2[i, j] =np.dot(temp[j, i], mu_img[i, j])
+        potentials[k] = piece1 + 0.5*piece2
+        log_pdfs[k] += -0.5 * piece2
     
     assignments = np.argmax(np.array(log_pdfs), axis=0)
     unary = np.zeros((H,W))
@@ -354,6 +345,10 @@ def jaccard_similarity(segmentation,truth):
     intersection = np.sum(np.sum(np.where(total == 2, 1, 0)))
     union = np.sum(np.sum(temp))
     return float(intersection)/float(union)*100
+
+def get_accuracy(seg_map, ground_truth):
+    correct = (seg_map + ground_truth - 1) ** 2
+    return np.mean(correct)
 
 if __name__ == '__main__':
     import sys
