@@ -58,7 +58,13 @@ def test_grabcut():
         similarity = jaccard_similarity(seg, ground_truth)
         mean_similarity += similarity
         print 'OBTAINED FINAL ACCURACY: {}, JACCARD SIMILARITY: {}'.format(accuracy, similarity)
-        imsave('./output/' + img_path.split('/')[2], np.where(seg == 0, 0, 255))
+        out = np.zeros(img.shape)
+        for i in range(img.shape[0]):
+            for j in range(img.shape[1]):
+                if seg[i,j] == 1:
+                    out[i,j,:] = img[i,j,:]
+
+        imsave('./output/' + img_path.split('/')[2], out)
         output.write('{}\t{}\n'.format(box_path, similarity))
 
     mean_accuracy /= len(data_list)
@@ -168,7 +174,7 @@ def get_pairwise(img):
     pairwise_dist = np.zeros((4, H, W))
 
     for i in xrange(4):
-        pairwise_dist[i] = np.sum((img - shifted_imgs[i]) ** 2, axis=2)
+        pairwise_dist[i] = np.sqrt(np.sum((img - shifted_imgs[i]) ** 2, axis=2))
 
     beta = 1.0 / (2 * np.mean(pairwise_dist))
 
@@ -211,7 +217,7 @@ def get_unary(img, gmm):
         cov = gaussian['cov']
         mu_img = img - np.reshape(gaussian['mean'], (1, 1, 3))
 
-        log_pdfs[k] += np.log(1.0 / np.sqrt(2 * (np.pi ** 3) * np.linalg.det(cov)))
+        log_pdfs[k] +=  -0.5*np.log(np.linalg.det(cov))
 
         piece1 = -np.log(gaussian['size']) + 0.5 * np.log(np.linalg.det(cov))
         temp = np.einsum('ijk,il', np.transpose(mu_img), np.linalg.inv(cov))
@@ -226,8 +232,10 @@ def get_unary(img, gmm):
         log_pdfs[k] += -1.0 * piece2
     
     assignments = np.argmax(np.array(log_pdfs), axis=0)
-    unary = potentials[assignments]
-
+    unary = np.zeros((H,W))
+    for i in xrange(H):
+        for j in xrange(W):
+            unary[i,j] = potentials[assignments[i,j],i,j]
     print 'CALCULATING UNARY POTENTIALS...'
 
     return unary, assignments
