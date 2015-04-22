@@ -10,9 +10,9 @@ import time
 
 
 KMEANS_CONVERGENCE = 1.0
-MAX_NUM_ITERATIONS = 5
 OUTSIDE_BOX_PRIOR = 1000
-
+MAX_NUM_ITERATIONS = 7
+THRESHOLD = 0.01
 GAMMA = 50
 
 SHIFT_DIRECTIONS = ['UP', 'DOWN', 'LEFT', 'RIGHT']
@@ -30,12 +30,13 @@ def test_grabcut():
     truth_list = sorted(['./ground_truth/' + f for f in listdir('./ground_truth')])
 
     output = open('./results.txt','wb')
-    mean_accuracy, mean_jaccard = 0.0, 0.0
+
+    mean_accuracy = 0.0
+    mean_similarity = 0.0
 
     for box_path, img_path, truth_path in zip(box_list, data_list, truth_list):
         with open(box_path) as box_file:
             bounds = box_file.readline().split()
-
             box = {
                 'x_min': int(bounds[0]),
                 'y_min': int(bounds[1]),
@@ -65,17 +66,20 @@ def test_grabcut():
         mean_accuracy += accuracy
         
         similarity = jaccard_similarity(seg, ground_truth)
-        check_sim = other_jaccard(seg, ground_truth)
-        mean_jaccard += similarity
-
+        mean_similarity += similarity
         print 'OBTAINED FINAL ACCURACY: {}, JACCARD SIMILARITY: {}'.format(accuracy, similarity)
-        print 'OTHER JACCARD: {}, MATCHES? {}'.format(check_sim, abs(check_sim - similarity) < 0.01)
-        imsave('./output/' + img_path.split('/')[2], np.where(seg == 0, 0, 255))
+        out = np.zeros(img.shape)
+        for i in range(img.shape[0]):
+            for j in range(img.shape[1]):
+                if seg[i,j] == 1:
+                    out[i,j,:] = img[i,j,:]
+
+        imsave('./output/' + img_path.split('/')[2], out)
         output.write('{}\t{}\n'.format(box_path, similarity))
 
     mean_accuracy /= len(data_list)
-    mean_jaccard /= len(data_list)
-    print 'MEAN ACCURACY: {}, MEAN JACCARD: {}'.format(mean_accuracy, mean_jaccard)
+    mean_similarity /= len(data_list)
+    print 'MEAN ACCURACY: {}, MEAN SIMILARITY: {}'.format(mean_accuracy,mean_similarity)
 
     output.close()
 
@@ -100,18 +104,23 @@ def grabcut(img, box=None):
 
     # Initialize GMM components with k-means
     fg_ass, bg_ass = quick_k_means(fg, bg)
-    
     # Iteratively refine segmentation from initialization
-    for i in xrange(MAX_NUM_ITERATIONS):
+    change = 1
+    i = 0
+    oldshape = fg.shape[0]
+    while change > THRESHOLD:
         fg_gmm, bg_gmm = fit_gmm(fg, bg, fg_ass, bg_ass)
         seg_map, fg_ass, bg_ass = estimate_segmentation(img, fg_gmm, bg_gmm, seg_map, box)
-        
+
         fg = img[seg_map == 1]
         bg = img[seg_map == 0]
-
-        print 'AT ITERATION {}, {} FOREGROUND / {} BACKGROUND'.format(i + 1, fg.shape[0], bg.shape[0])
-
+        
+        change = abs(oldshape-fg.shape[0])/float(oldshape)
+        oldshape = fg.shape[0]
+        print 'AT ITERATION {}, {} FOREGROUND / {} BACKGROUND'.format(i + 1,fg.shape[0], bg.shape[0])
+        i += 1
     return seg_map
+
 
 def preprocess(img):
     return img
@@ -175,7 +184,7 @@ def get_pairwise(img):
     pairwise_dist = np.zeros((4, H, W))
 
     for i in xrange(4):
-        pairwise_dist[i] = np.sum((img - shifted_imgs[i]) ** 2, axis=2)
+        pairwise_dist[i] = np.sqrt(np.sum((img - shifted_imgs[i]) ** 2, axis=2))
 
     beta = 1.0 / (2 * np.mean(pairwise_dist))
 
@@ -218,7 +227,7 @@ def get_unary(img, gmm):
         cov = gaussian['cov']
         mu_img = img - np.reshape(gaussian['mean'], (1, 1, 3))
 
-        log_pdfs[k] += np.log(1.0 / np.sqrt(2 * (np.pi ** 3) * np.linalg.det(cov)))
+        log_pdfs[k] +=  -0.5*np.log(np.linalg.det(cov))
 
         piece1 = -np.log(gaussian['size']) + 0.5 * np.log(np.linalg.det(cov))
         temp = np.einsum('ijk,il', np.transpose(mu_img), np.linalg.inv(cov))
@@ -232,16 +241,11 @@ def get_unary(img, gmm):
         potentials[k] = piece1 + piece2
         log_pdfs[k] += -1.0 * piece2
     
-    try:
-        assignments = np.argmax(np.array(log_pdfs), axis=0)
-        unary = np.zeros((H, W))
-
-        for i in xrange(H):
-            for j in xrange(j):
-                unary[i, j] = potentials[assignments[i, j], i, j]
-    except:
-        pdb.set_trace()
-
+    assignments = np.argmax(np.array(log_pdfs), axis=0)
+    unary = np.zeros((H,W))
+    for i in xrange(H):
+        for j in xrange(W):
+            unary[i,j] = potentials[assignments[i,j],i,j]
     print 'CALCULATING UNARY POTENTIALS...'
 
     return unary, assignments
@@ -377,6 +381,11 @@ if __name__ == '__main__':
     import sys
 
     if len(sys.argv) > 1:
-        grabcut(sys.argv[1])
+        seg = grabcut(sys.argv[1])
+        ground_truth = imread(sys.argv[2])
+        ground_truth[ground_truth > 0] = 1
+        accuracy = get_accuracy(seg, ground_truth)
+        similarity = jaccard_similarity(seg, ground_truth)
+        print 'OBTAINED FINAL ACCURACY: {}, JACCARD SIMILARITY: {}'.format(accuracy, similarity)
     else:
         test_grabcut()
