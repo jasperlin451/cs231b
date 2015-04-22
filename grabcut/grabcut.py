@@ -226,10 +226,7 @@ def get_unary(img, gmm):
         log_pdfs[k] += -1.0 * piece2
     
     assignments = np.argmax(np.array(log_pdfs), axis=0)
-    unary = np.zeros((H,W))
-    for i in xrange(H):
-        for j in xrange(W):
-            unary[i,j] = potentials[assignments[i,j],i,j]
+    unary = potentials[assignments]
 
     print 'CALCULATING UNARY POTENTIALS...'
 
