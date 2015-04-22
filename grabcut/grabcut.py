@@ -9,25 +9,36 @@ from scipy.spatial.distance import cdist
 import time
 
 
+# TODO:
+#  -implement 8 connected pairwise
+#  -look at decreasing number of components for background
+#  -look for screwiness with unary location assignment
+
 KMEANS_CONVERGENCE = 1.0
 OUTSIDE_BOX_PRIOR = 1000
 MAX_NUM_ITERATIONS = 7
-THRESHOLD = 0.01
+THRESHOLD = 0.001
 GAMMA = 50
 
 SHIFT_DIRECTIONS = ['UP', 'DOWN', 'LEFT', 'RIGHT']
 
 STRUCTURES = {
-    'UP': np.array([[0, 1, 0], [0, 0, 0], [0, 0, 0]]),
-    'DOWN': np.array([[0, 0, 0], [0, 0, 0], [0, 1, 0]]),
-    'LEFT': np.array([[0, 0, 0], [1, 0, 0], [0, 0, 0]]),
-    'RIGHT': np.array([[0, 0, 0], [0, 0, 1], [0, 0, 0]]),
+    'UP': np.array([[0, 0, 0], [0, 0, 0], [0, 1, 0]]),
+    'DOWN': np.array([[0, 1, 0], [0, 0, 0], [0, 0, 0]]),
+    'LEFT': np.array([[0, 0, 0], [0, 0, 1], [0, 0, 0]]),
+    'RIGHT': np.array([[0, 0, 0], [1, 0, 0], [0, 0, 0]]),
 }
 
 def test_grabcut():
     box_list = sorted(['./bboxes/' + f for f in listdir('./bboxes')])
     data_list = sorted(['./data/' + f for f in listdir('./data')])
     truth_list = sorted(['./ground_truth/' + f for f in listdir('./ground_truth')])
+
+    """
+    box_list = box_list[9:11]
+    data_list = data_list[9:11]
+    truth_list = truth_list[9:11]
+    """
 
     output = open('./results.txt','wb')
 
@@ -97,13 +108,14 @@ def grabcut(img, box=None):
 
     # Initialize segmentation map to bounding box, foreground = 1, background = 0
     seg_map = np.zeros((img.shape[0], img.shape[1]))
-    seg_map[(box['y_min'] + 1):box['y_max'], (box['x_min'] + 1):box['x_max']] = 1
+    seg_map[box['y_min'] - 1:box['y_max'] + 1, box['x_min'] - 1:box['x_max'] + 1] = 1
     
     fg = img[seg_map == 1]
     bg = img[seg_map == 0]
 
     # Initialize GMM components with k-means
     fg_ass, bg_ass = quick_k_means(fg, bg)
+
     # Iteratively refine segmentation from initialization
     change = 1
     i = 0
@@ -117,7 +129,8 @@ def grabcut(img, box=None):
         
         change = abs(oldshape-fg.shape[0])/float(oldshape)
         oldshape = fg.shape[0]
-        print 'AT ITERATION {}, {} FOREGROUND / {} BACKGROUND'.format(i + 1,fg.shape[0], bg.shape[0])
+        print 'AT ITERATION {}, {} FOREGROUND / {} BACKGROUND'.format(i + 1, fg.shape[0], bg.shape[0])
+        print 'FOREGROUND ASSIGNMENT CHANGED {}%'.format(str(100.0 * change)[:5])
         i += 1
     return seg_map
 
@@ -133,16 +146,18 @@ def estimate_segmentation(img, fg_gmm, bg_gmm, seg_map, box):
     # Calculate pairwise values
     pair_pot = get_pairwise(img)
 
+    #pdb.set_trace()
+
     # Remove portion outside bounding box
-    fg_unary = fg_unary[box['y_min']:box['y_max'], box['x_min']:box['x_max']]
-    bg_unary = bg_unary[box['y_min']:box['y_max'], box['x_min']:box['x_max']]
-    pair_pot = pair_pot[:, box['y_min']:box['y_max'], box['x_min']:box['x_max']]
+    fg_unary = fg_unary[box['y_min']-1:box['y_max']+1, box['x_min']-1:box['x_max']+1]
+    bg_unary = bg_unary[box['y_min']-1:box['y_max']+1, box['x_min']-1:box['x_max']+1]
+    pair_pot = pair_pot[:, box['y_min']-1:box['y_max']+1, box['x_min']-1:box['x_max']+1]
 
     # Normalize potentials
-    """
+    
     fg_unary = (fg_unary - np.mean(fg_unary)) / np.std(fg_unary)
     bg_unary = (bg_unary - np.mean(bg_unary)) / np.std(bg_unary)
-
+    """
     for i in xrange(pair_pot.shape[0]):
         pair_pot[i] = (pair_pot[i] - np.mean(pair_pot[i])) / np.std(pair_pot[i])
     pair_pot *= 3.0
@@ -156,7 +171,7 @@ def estimate_segmentation(img, fg_gmm, bg_gmm, seg_map, box):
     box_seg = segment(pot_graph, nodes)
     
     seg_map = np.zeros((img.shape[0], img.shape[1]), dtype='int32')
-    seg_map[box['y_min']:box['y_max'], box['x_min']:box['x_max']] = box_seg
+    seg_map[box['y_min']-1:box['y_max']+1, box['x_min']-1:box['x_max']+1] = box_seg
 
     return seg_map, fg_ass[seg_map == 1], bg_ass[seg_map == 0]
 
@@ -237,7 +252,7 @@ def get_unary(img, gmm):
         for i in xrange(H):
             for j in xrange(W):
                 piece2[i, j] = np.dot(temp[j, i], mu_img[i, j])
-        
+
         potentials[k] = piece1 + piece2
         log_pdfs[k] += -1.0 * piece2
     
@@ -250,7 +265,7 @@ def get_unary(img, gmm):
 
     return unary, assignments
 
-def quick_k_means(foreground, background, k=5):
+def quick_k_means(foreground, background, k=3):
     fg_mu = foreground[np.random.choice(foreground.shape[0], k), :]
     bg_mu = background[np.random.choice(background.shape[0], k), :]
     avg_centroid_change = float('Inf')
@@ -280,7 +295,7 @@ def quick_k_means(foreground, background, k=5):
 
     return fg_ass, bg_ass
 
-def fit_gmm(fg, bg, fg_ass, bg_ass, k=5):
+def fit_gmm(fg, bg, fg_ass, bg_ass, k=3):
     print 'FITTING GMM...'
 
     fg_gmms, bg_gmms = [], []
@@ -308,10 +323,12 @@ def fit_gmm(fg, bg, fg_ass, bg_ass, k=5):
         if bg_gmm['size'] > 0.001:
             bg_gmms.append(bg_gmm)
 
+    """
     if len(fg_gmms) < k:
         split(fg_gmms, fg, fg_ass, k)
     if len(bg_gmms) < k:
         split(bg_gmms, bg, bg_ass, k)
+    """
 
     return fg_gmms, bg_gmms
 
