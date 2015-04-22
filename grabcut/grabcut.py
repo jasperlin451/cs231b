@@ -11,6 +11,7 @@ import time
 
 KMEANS_CONVERGENCE = 1.0
 MAX_NUM_ITERATIONS = 5
+OUTSIDE_BOX_PRIOR = 1000
 
 GAMMA = 50
 
@@ -29,7 +30,7 @@ def test_grabcut():
     truth_list = sorted(['./ground_truth/' + f for f in listdir('./ground_truth')])
 
     output = open('./results.txt','wb')
-    mean_accuracy = 0.0
+    mean_accuracy, mean_jaccard = 0.0, 0.0
 
     for box_path, img_path, truth_path in zip(box_list, data_list, truth_list):
         with open(box_path) as box_file:
@@ -48,23 +49,33 @@ def test_grabcut():
         ground_truth = imread(truth_path)
         ground_truth[ground_truth > 0] = 1
 
+        #keep_going = True
+
+        #while(keep_going):
         start = time.time()
+        #try:
         seg = grabcut(img, box)
+        #    keep_going = False
+        #except:
+        #    pass
         end = time.time()
         print 'SEGMENTATION TOOK {} SECONDS FOR {} x {} IMAGE'.format(end - start, img.shape[1], img.shape[0])
 
         accuracy = get_accuracy(seg, ground_truth)
         mean_accuracy += accuracy
         
-        similarity = 0.0
         similarity = jaccard_similarity(seg, ground_truth)
+        check_sim = other_jaccard(seg, ground_truth)
+        mean_jaccard += similarity
 
         print 'OBTAINED FINAL ACCURACY: {}, JACCARD SIMILARITY: {}'.format(accuracy, similarity)
+        print 'OTHER JACCARD: {}, MATCHES? {}'.format(check_sim, abs(check_sim - similarity) < 0.01)
         imsave('./output/' + img_path.split('/')[2], np.where(seg == 0, 0, 255))
         output.write('{}\t{}\n'.format(box_path, similarity))
 
     mean_accuracy /= len(data_list)
-    print 'MEAN ACCURACY: {}'.format(mean_accuracy)
+    mean_jaccard /= len(data_list)
+    print 'MEAN ACCURACY: {}, MEAN JACCARD: {}'.format(mean_accuracy, mean_jaccard)
 
     output.close()
 
@@ -94,6 +105,7 @@ def grabcut(img, box=None):
     for i in xrange(MAX_NUM_ITERATIONS):
         fg_gmm, bg_gmm = fit_gmm(fg, bg, fg_ass, bg_ass)
         seg_map, fg_ass, bg_ass = estimate_segmentation(img, fg_gmm, bg_gmm, seg_map, box)
+        
         fg = img[seg_map == 1]
         bg = img[seg_map == 0]
 
@@ -117,6 +129,16 @@ def estimate_segmentation(img, fg_gmm, bg_gmm, seg_map, box):
     bg_unary = bg_unary[box['y_min']:box['y_max'], box['x_min']:box['x_max']]
     pair_pot = pair_pot[:, box['y_min']:box['y_max'], box['x_min']:box['x_max']]
 
+    # Normalize potentials
+    """
+    fg_unary = (fg_unary - np.mean(fg_unary)) / np.std(fg_unary)
+    bg_unary = (bg_unary - np.mean(bg_unary)) / np.std(bg_unary)
+
+    for i in xrange(pair_pot.shape[0]):
+        pair_pot[i] = (pair_pot[i] - np.mean(pair_pot[i])) / np.std(pair_pot[i])
+    pair_pot *= 3.0
+    """
+
     # Construct graph and run mincut on it
     pot_graph, nodes = create_graph(fg_unary, bg_unary, pair_pot)
     pot_graph.maxflow()
@@ -128,19 +150,6 @@ def estimate_segmentation(img, fg_gmm, bg_gmm, seg_map, box):
     seg_map[box['y_min']:box['y_max'], box['x_min']:box['x_max']] = box_seg
 
     return seg_map, fg_ass[seg_map == 1], bg_ass[seg_map == 0]
-
-def adjust_outside_box(fg_unary, bg_unary, box):
-    fg_unary[:box['y_min'], :] = -100000
-    bg_unary[:box['y_min'], :] = 100000
-
-    fg_unary[:, :box['x_min']] = -100000
-    bg_unary[:, :box['x_min']] = 100000
-
-    fg_unary[box['y_max']:, :] = -100000
-    bg_unary[box['y_max']:, :] = 100000
-
-    fg_unary[:, box['x_max']:] = -100000
-    bg_unary[:, box['x_max']:] = 100000
 
 def create_graph(fg_unary, bg_unary, pair_pot):
     graph = maxflow.Graph[float]()
@@ -224,8 +233,12 @@ def get_unary(img, gmm):
         log_pdfs[k] += -1.0 * piece2
     
     try:
-        unary = np.max(np.array(potentials), axis=0)
         assignments = np.argmax(np.array(log_pdfs), axis=0)
+        unary = np.zeros((H, W))
+
+        for i in xrange(H):
+            for j in xrange(j):
+                unary[i, j] = potentials[assignments[i, j], i, j]
     except:
         pdb.set_trace()
 
@@ -264,6 +277,8 @@ def quick_k_means(foreground, background, k=5):
     return fg_ass, bg_ass
 
 def fit_gmm(fg, bg, fg_ass, bg_ass, k=5):
+    print 'FITTING GMM...'
+
     fg_gmms, bg_gmms = [], []
 
     for i in xrange(k):
@@ -289,9 +304,36 @@ def fit_gmm(fg, bg, fg_ass, bg_ass, k=5):
         if bg_gmm['size'] > 0.001:
             bg_gmms.append(bg_gmm)
 
-    print 'FITTING GMM...'
+    if len(fg_gmms) < k:
+        split(fg_gmms, fg, fg_ass, k)
+    if len(bg_gmms) < k:
+        split(bg_gmms, bg, bg_ass, k)
 
     return fg_gmms, bg_gmms
+
+def split(gmm_list, pixels, assignment, k):
+    sizes = np.array([f['size'] for f in gmm_list])
+    orig_size = np.max(sizes)
+    gmm_list.pop(np.argmax(sizes))
+
+    largest = np.argmax(np.bincount(assignment))
+    members = pixels[assignment == largest]
+
+    num_new_comps = k - len(gmm_list)
+    ass1, ass2 = quick_k_means(members, members, k=num_new_comps)
+
+    for i in xrange(num_new_comps):
+        new_members = members[ass1 == i]
+
+        new_gmm = {
+            'mean': np.mean(new_members, axis=0),
+            'cov': np.cov(new_members, rowvar=0) + np.identity(3)*1e-8,
+            'size': orig_size * new_members.shape[0] / members.shape[0]
+        }
+
+        gmm_list.append(new_gmm)
+
+    return gmm_list
 
 def select_bounding_box(img):
     plt.imshow(img)
@@ -316,12 +358,19 @@ def select_bounding_box(img):
 
     return box
 
+def other_jaccard(segmentation, truth):
+    intersection = np.int_((segmentation + truth) == 2)
+    union = np.int_((segmentation + truth) != 0)
+
+    return 100.0 * np.sum(intersection) / np.sum(union)
+
 def jaccard_similarity(segmentation,truth):
     total = segmentation + truth
     temp = np.where(total == 2,1,total)
     temp = np.where(temp == 1,1,0)
     intersection = np.sum(np.sum(np.where(total == 2, 1, 0)))
     union = np.sum(np.sum(temp))
+
     return float(intersection)/float(union)*100
 
 if __name__ == '__main__':
