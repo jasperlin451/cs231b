@@ -8,14 +8,12 @@ from scipy.misc import imread, imsave
 from scipy.spatial.distance import cdist
 import time
 
-
 # TODO:
 #  -look at decreasing number of components for background
 
 KMEANS_CONVERGENCE = 1.0
-OUTSIDE_BOX_PRIOR = 1000
 MAX_NUM_ITERATIONS = 7
-THRESHOLD = 0.001
+THRESHOLD = 0.01
 GAMMA = 50
 
 INITIAL_NUMBER_COMPONENTS = 4
@@ -37,13 +35,6 @@ def test_grabcut():
     box_list = sorted(['./bboxes/' + f for f in listdir('./bboxes')])
     data_list = sorted(['./data/' + f for f in listdir('./data')])
     truth_list = sorted(['./ground_truth/' + f for f in listdir('./ground_truth')])
-
-    """
-    box_list = box_list[11:12]
-    data_list = data_list[11:12]
-    truth_list = truth_list[11:12]
-    """
-
     output = open('./results.txt','wb')
 
     mean_accuracy = 0.0
@@ -142,6 +133,21 @@ def grabcut(img, box=None):
 def preprocess(img):
     return img
 
+def adjust_outside_box(fg_unary, bg_unary, box):
+    fg_unary[:box['y_min'], :] = 1e15
+    bg_unary[:box['y_min'], :] = -1e15
+
+    fg_unary[:, :box['x_min']] = 1e15
+    bg_unary[:, :box['x_min']] = -1e15
+
+    fg_unary[box['y_max']:, :] = 1e15
+    bg_unary[box['y_max']:, :] = -1e15
+
+    fg_unary[:, box['x_max']:] = 1e15
+    bg_unary[:, box['x_max']:] = -1e15
+    
+    return fg_unary, bg_unary
+
 def estimate_segmentation(img, fg_gmm, bg_gmm, seg_map, box):
     # Calculate unary values and component assignments
     fg_unary, fg_ass = get_unary(img, fg_gmm)
@@ -151,22 +157,7 @@ def estimate_segmentation(img, fg_gmm, bg_gmm, seg_map, box):
     pair_pot = get_pairwise(img)
 
     #pdb.set_trace()
-
-    # Remove portion outside bounding box
-    fg_unary = fg_unary[box['y_min']-1:box['y_max']+1, box['x_min']-1:box['x_max']+1]
-    bg_unary = bg_unary[box['y_min']-1:box['y_max']+1, box['x_min']-1:box['x_max']+1]
-    pair_pot = pair_pot[:, box['y_min']-1:box['y_max']+1, box['x_min']-1:box['x_max']+1]
-
-    # Normalize potentials
-    """
-    fg_unary = (fg_unary - np.mean(fg_unary)) / np.std(fg_unary)
-    bg_unary = (bg_unary - np.mean(bg_unary)) / np.std(bg_unary)
-    
-    for i in xrange(pair_pot.shape[0]):
-        pair_pot[i] = (pair_pot[i] - np.mean(pair_pot[i])) / np.std(pair_pot[i])
-    pair_pot *= 3.0
-    """
-
+    fg_unary,bg_unary = adjust_outside_box(fg_unary,bg_unary,box)
     # Construct graph and run mincut on it
     pot_graph, nodes = create_graph(fg_unary, bg_unary, pair_pot)
     pot_graph.maxflow()
@@ -174,10 +165,7 @@ def estimate_segmentation(img, fg_gmm, bg_gmm, seg_map, box):
     # Create bit map of result and return it
     box_seg = segment(pot_graph, nodes)
     
-    seg_map = np.zeros((img.shape[0], img.shape[1]), dtype='int32')
-    seg_map[box['y_min']-1:box['y_max']+1, box['x_min']-1:box['x_max']+1] = box_seg
-
-    return seg_map, fg_ass[seg_map == 1], bg_ass[seg_map == 0]
+    return box_seg, fg_ass[box_seg == 1], bg_ass[box_seg == 0]
 
 def create_graph(fg_unary, bg_unary, pair_pot):
     graph = maxflow.Graph[float]()
