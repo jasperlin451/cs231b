@@ -10,7 +10,6 @@ import time
 
 
 # TODO:
-#  -implement 8 connected pairwise
 #  -look at decreasing number of components for background
 
 KMEANS_CONVERGENCE = 1.0
@@ -18,6 +17,10 @@ OUTSIDE_BOX_PRIOR = 1000
 MAX_NUM_ITERATIONS = 7
 THRESHOLD = 0.001
 GAMMA = 50
+
+INITIAL_NUMBER_COMPONENTS = 4
+NUMBER_FG_COMPONENTS = 4
+NUMBER_BG_COMPONENTS = 4
 
 SHIFT_DIRECTIONS = ['UP', 'DOWN', 'LEFT', 'RIGHT', 'UP_LEFT', 'UP_RIGHT']
 
@@ -36,9 +39,9 @@ def test_grabcut():
     truth_list = sorted(['./ground_truth/' + f for f in listdir('./ground_truth')])
 
     """
-    box_list = box_list[9:11]
-    data_list = data_list[9:11]
-    truth_list = truth_list[9:11]
+    box_list = box_list[11:12]
+    data_list = data_list[11:12]
+    truth_list = truth_list[11:12]
     """
 
     output = open('./results.txt','wb')
@@ -158,7 +161,7 @@ def estimate_segmentation(img, fg_gmm, bg_gmm, seg_map, box):
     """
     fg_unary = (fg_unary - np.mean(fg_unary)) / np.std(fg_unary)
     bg_unary = (bg_unary - np.mean(bg_unary)) / np.std(bg_unary)
-
+    
     for i in xrange(pair_pot.shape[0]):
         pair_pot[i] = (pair_pot[i] - np.mean(pair_pot[i])) / np.std(pair_pot[i])
     pair_pot *= 3.0
@@ -203,7 +206,7 @@ def get_pairwise(img):
     for i in xrange(6):
         pairwise_dist[i] = np.sqrt(np.sum((img - shifted_imgs[i]) ** 2, axis=2))
 
-    beta = 1.0 / (2 * np.mean(pairwise_dist))
+    beta = 1.0 / (2 * np.mean(pairwise_dist[[0,2,4,5],:,:]))
 
     pairwise_dist = np.exp(-1 * beta * pairwise_dist)
     pairwise_dist *= GAMMA
@@ -272,11 +275,10 @@ def get_unary(img, gmm):
     for i in xrange(H):
         for j in xrange(W):
             unary[i,j] = potentials[assignments[i,j],i,j]
-    print 'CALCULATING UNARY POTENTIALS...'
 
     return unary, assignments
 
-def quick_k_means(foreground, background, k=3):
+def quick_k_means(foreground, background, k=INITIAL_NUMBER_COMPONENTS):
     fg_mu = foreground[np.random.choice(foreground.shape[0], k), :]
     bg_mu = background[np.random.choice(background.shape[0], k), :]
     avg_centroid_change = float('Inf')
@@ -306,12 +308,10 @@ def quick_k_means(foreground, background, k=3):
 
     return fg_ass, bg_ass
 
-def fit_gmm(fg, bg, fg_ass, bg_ass, k=3):
-    print 'FITTING GMM...'
-
+def fit_gmm(fg, bg, fg_ass, bg_ass, k=INITIAL_NUMBER_COMPONENTS):
     fg_gmms, bg_gmms = [], []
 
-    for i in xrange(k):
+    for i in xrange(max(np.max(fg_ass), np.max(bg_ass)) + 1):
         fg_cluster = fg[fg_ass == i]
         bg_cluster = bg[bg_ass == i]
 
@@ -334,11 +334,22 @@ def fit_gmm(fg, bg, fg_ass, bg_ass, k=3):
         if bg_gmm['size'] > 0.001:
             bg_gmms.append(bg_gmm)
 
-    """
     if len(fg_gmms) < k:
         split(fg_gmms, fg, fg_ass, k)
-    if len(bg_gmms) < k:
-        split(bg_gmms, bg, bg_ass, k)
+    #if len(bg_gmms) < k:
+    #    split(bg_gmms, bg, bg_ass, k)
+
+    """
+    if len(fg_gmms) < NUMBER_FG_COMPONENTS:
+        print 'REINITIALIZING FOREGROUND COMPONENTS...'
+        fg_ass, temp = quick_k_means(fg, fg, k=NUMBER_FG_COMPONENTS)
+        return fit_gmm(fg, bg, fg_ass, bg_ass)
+    """
+    """
+    if len(bg_gmms) < NUMBER_BG_COMPONENTS:
+        print 'REINITIALIZING BACKGROUND COMPONENTS...'
+        bg_ass, temp = quick_k_means(bg, bg, k=NUMBER_BG_COMPONENTS)
+        return fit_gmm(fg, bg, fg_ass, bg_ass)
     """
 
     return fg_gmms, bg_gmms
