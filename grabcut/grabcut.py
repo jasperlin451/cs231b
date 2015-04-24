@@ -13,7 +13,7 @@ import time
 
 KMEANS_CONVERGENCE = 1.0
 MAX_NUM_ITERATIONS = 7
-THRESHOLD = 0.01
+THRESHOLD = 0.001
 GAMMA = 50
 
 INITIAL_NUMBER_COMPONENTS = 4
@@ -134,17 +134,17 @@ def preprocess(img):
     return img
 
 def adjust_outside_box(fg_unary, bg_unary, box):
-    fg_unary[:box['y_min'], :] = 1e15
-    bg_unary[:box['y_min'], :] = -1e15
+    fg_unary[:box['y_min'], :] = 1e4
+    bg_unary[:box['y_min'], :] = 0
 
-    fg_unary[:, :box['x_min']] = 1e15
-    bg_unary[:, :box['x_min']] = -1e15
+    fg_unary[:, :box['x_min']] = 1e4
+    bg_unary[:, :box['x_min']] = 0
 
-    fg_unary[box['y_max']:, :] = 1e15
-    bg_unary[box['y_max']:, :] = -1e15
+    fg_unary[box['y_max']:, :] = 1e4
+    bg_unary[box['y_max']:, :] = 0
 
-    fg_unary[:, box['x_max']:] = 1e15
-    bg_unary[:, box['x_max']:] = -1e15
+    fg_unary[:, box['x_max']:] = 1e4
+    bg_unary[:, box['x_max']:] = 0
     
     return fg_unary, bg_unary
 
@@ -164,6 +164,9 @@ def estimate_segmentation(img, fg_gmm, bg_gmm, seg_map, box):
 
     # Create bit map of result and return it
     box_seg = segment(pot_graph, nodes)
+
+    seg_map = np.zeros((img.shape[0], img.shape[1]), dtype='int32')
+    seg_map[box['y_min']-1:box['y_max']+1, box['x_min']-1:box['x_max']+1] = box_seg[box['y_min']-1:box['y_max']+1, box['x_min']-1:box['x_max']+1]
     
     return box_seg, fg_ass[box_seg == 1], bg_ass[box_seg == 0]
 
