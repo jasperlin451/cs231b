@@ -166,7 +166,7 @@ bp is a "branch pointer" --> bp = [ m:m+bc-1 ], it is used to point
    leaves.
 */
 
-    /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /*
+   /*
     find the "k","l" indices of the minimum distance "t1" in the remaining
     half matrix, the new computed distances to the new cluster will be placed
     in the row/col "l", then the leftmost column in the matrix of pairwise
@@ -176,7 +176,7 @@ bp is a "branch pointer" --> bp = [ m:m+bc-1 ], it is used to point
     /*  OLD METHOD: search for the minimun in the whole "y" at every branch
     iteration
     t1 = inf;
-    p1 = ((m2m1 - bc) * bc) >> 1; /* finds where the remaining matrix starts
+    p1 = ((m2m1 - bc) * bc) >> 1; finds where the remaining matrix starts
     for (j=bc; j<m; j++) {
      for (i=j+1; i<m; i++) {
        t2 = y[p1++];
@@ -279,7 +279,7 @@ bp is a "branch pointer" --> bp = [ m:m+bc-1 ], it is used to point
     obp[k] = obp[bc];        /* new cluster branch ptr */
     obp[l] = bp;             /* leftmost column cluster branch ptr */
 
-    /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /*
+    /*
     Merges two observations/clusters ("k" and "l") by re-calculating new
     distances for every remaining observation/cluster and place the
     information in the row/col "l" */
@@ -347,6 +347,14 @@ bp is a "branch pointer" --> bp = [ m:m+bc-1 ], it is used to point
             break;
         case median:
             t1 = t1/4;
+        case single:
+            continue;
+        case complete:
+            continue;
+        case weighted:
+            continue;
+        case ward:
+            continue;
     } /* switch (method_key) */
 
     switch (method_key) {
@@ -553,7 +561,7 @@ bp is a "branch pointer" --> bp = [ m:m+bc-1 ], it is used to point
 
     } /* switch (method_key) */
 
-    /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /* /*
+    /*
       moves the leftmost column "bc" to row/col "k" */
     if (k!=bc) {
         q1 = bn - k;

@@ -1,0 +1,1 @@
+The evaluation values: average-overlap=0.181259, success auc=0.225000, map=0.200000

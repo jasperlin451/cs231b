@@ -17,7 +17,7 @@
 
 
 function [BB1 shift] = bb_predict(BB0,pt0,pt1)
-
+pt0,pt1
 of  = pt1 - pt0;
 dx  = median(of(1,:));
 dy  = median(of(2,:));
