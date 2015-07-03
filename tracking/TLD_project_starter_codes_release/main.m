@@ -30,10 +30,10 @@ if num_frames_to_track < num_frames
 end
 
 fprintf('Tracking ... %d frames\n', num_frames);
-
+c1 = clock;
 run_TLD_on_video(input_video_directory, output_video_directory, ...
       ground_truth_file, num_frames);
-
+c2 = clock;
 detection_file = [output_video_directory '/tld.txt'];
 [avg_overlap, success_auc, map] = tldEvaluateTracking(detection_file, ...
                                     ground_truth_file, num_frames);
@@ -45,3 +45,4 @@ fid=fopen(sprintf('%s/%s_res.txt', output_video_directory, class_name), 'w');
 fprintf(fid, 'The evaluation values: average-overlap=%f, success auc=%f, map=%f\n', ...
          avg_overlap, success_auc, map);
 fclose(fid);
+display(c2-c1)

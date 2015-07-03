@@ -5,7 +5,6 @@
 function [conf1,isin] = tldNN(x,tld)
 % 'conf1' ... full model (Relative Similarity)
 % 'isnin' ... inside positive ball, id positive ball, inside negative ball
-
 isin = nan(3,size(x,2));
 
 if isempty(tld.pex) % IF positive examples in the model are not defined THEN everything is negative
@@ -38,6 +37,22 @@ conf1 = nan(1,size(x,2));
 %%        -- inin(3,i) is set to 1 (else set to nan) if patch i belongs to negatives 
 %% HINT: Make use of distance function in mex folder to make things faster
 
-
+for i=1:size(x,2)
+    positiveDistance = distance(x(:,i),tld.pex,1); %flag 1 for normalized correlation
+    negativeDistance = distance(x(:,i),tld.nex,1);
+    %calculations about patches correlation
+    
+    %positive correlation
+    
+    if any(positiveDistance > tld.model.ncc_thesame)
+        isin(1,i) = 1;
+    end
+    [~, isin(2,i)] = max(positiveDistance);
+    %negative correlation
+    if any(negativeDistance > tld.model.ncc_thesame)
+        isin(3,i) = 1;
+    end
+    conf1(i) = (1- max(negativeDistance))/(2-max(negativeDistance)-max(positiveDistance));
+end
 
 %% ----------------------- (END) -------------------------------

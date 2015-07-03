@@ -26,16 +26,16 @@ update_detector     = 1; % learning on/off, of 0 detector is trained only in the
 opt.model           = struct('min_win',min_win, ...
                             'patchsize',patchsize, ...
                             'fliplr',fliplr, ...
-                            'ncc_thesame',0.95, ...
+                            'ncc_thesame',0.9, ...
                             'valid',0.5,...
-                            'thr_nn',0.6,...
-                            'thr_nn_valid',0.75, ...
-                            'nn_patch_confidence', 0.60);
+                            'thr_nn',0.65,...
+                            'thr_nn_valid',0.7, ...
+                            'nn_patch_confidence', 0.6);
 
 
 %% Add suitable parameters according to your choice of learning/detection
 %% algorithm.
-opt.detection_model_params = struct('learning_params', []);
+opt.detection_model_params = struct('classifiers', 10,'comparisons',15);
 
 
 %% Below, you should set some parameters for positive and negative gneration. These will be passed to
@@ -43,8 +43,8 @@ opt.detection_model_params = struct('learning_params', []);
 %% number of warps on positive box, possible noise to be added, rotation of positive, shifting etc.
 %% In gneral, this is data augmentation which will be really useful when training with limited examples.
 
-opt.p_par_init      = struct('num_closest',1,'num_warps',20,'noise',5,'angle',20,'shift',0.02,'scale',0.02); % synthesis of positive examples during initialization
-opt.p_par_update    = struct('num_closest',20,'num_warps',10,'noise',5,'angle',10,'shift',0.02,'scale',0.02); % synthesis of positive examples during update
+opt.p_par_init      = struct('num_closest',10,'num_warps',20,'noise',5,'angle',10,'shift',0.01,'scale',0.01); % synthesis of positive examples during initialization
+opt.p_par_update    = struct('num_closest',10,'num_warps',10,'noise',10,'angle',10,'shift',0.01,'scale',0.01); % synthesis of positive examples during update
 opt.n_par           = struct('overlap',0.2,'num_patches',100); % negative examples initialization/update
 % ------------------------------- END ---------------------------------------
 
@@ -55,7 +55,7 @@ opt.n_par           = struct('overlap',0.2,'num_patches',100); % negative exampl
 %%       if the feature is simply a resized version of the patch, then
 %%       feature dimension would be prod(opt.patchsize). But, try other features
 %%       for better performance.
-opt.pattern_size = 2;
+opt.pattern_size = prod(patchsize);
 %% ------------------- END ---------------------
 
 % Do not change ---------

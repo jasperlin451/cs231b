@@ -1,0 +1,26 @@
+\begin{thebibliography}{1}\itemsep=-1pt
+
+\bibitem{MIL}
+B.~Babenko, M.-H. Yang, and S.~Belongie.
+\newblock Visual tracking with online multiple instance learning.
+\newblock {\em IEEE Transactions on Pattern Analysis and Machine Intelligence
+  (PAMI)}, August 2011.
+
+\bibitem{kernel}
+S.~Hare, A.~Saffari, and P.~Torr.
+\newblock Struck: Structured output tracking with kernels.
+\newblock In {\em Computer Vision (ICCV), 2011 IEEE International Conference
+  on}, pages 263--270, Nov 2011.
+
+\bibitem{tld}
+Z.~Kalal, K.~Mikolajczyk, and J.~Matas.
+\newblock Tracking-learning-detection.
+\newblock {\em IEEE Trans. Pattern Anal. Mach. Intell.}, 34(7):1409--1422, July
+  2012.
+
+\bibitem{survey}
+A.~Yilmaz, O.~Javed, and M.~Shah.
+\newblock Object tracking: A survey.
+\newblock {\em ACM Comput. Surv.}, 38(4), Dec. 2006.
+
+\end{thebibliography}

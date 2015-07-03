@@ -25,7 +25,11 @@ bbN = [];
 %% (NOTE: It might be faster to just sample bounding-boxes from tld.dt{end}.bb.
 %%        This just uses hard-negatives.)
 
-
+overlap = bb_overlap(tld.grid,bb);
+indexes = find(overlap<0.2);
+%randomly select from these to be negative examples
+index = randvalues(1:length(indexes),tld.n_par.num_patches);
+bbN = tld.grid(:,indexes(index));
 %% ------------------------ (END) -----------------------------------------------
 
 %% nEx - the features extracted from the sampled ``negative" bounding boxes (bbN) in image

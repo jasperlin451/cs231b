@@ -14,6 +14,7 @@ tld.img{I} = img_get(tld.source,I); % grab frame from camera / load image
 % DETECTOR ----------------------------------------------------------------
 
 [dBB dConf tld] = tldDetection(tld,I); % detect appearances by cascaded detector (variance filter -> ensemble classifier -> nearest neightbour)
+
 %dBB = [];
 % INTEGRATOR --------------------------------------------------------------
 
@@ -28,9 +29,27 @@ TR = 1; if isempty(tBB), TR = 0; end % is tracker defined?
 %%       different from the original TLD tracker. You should play
 %%       around with different ways of combining the detector and tracker.
 %%       Choosing a good startegy will greatly improve performance.
+%filter the detector bounding boxes for change in size and motion
 
-
-if TR % if tracker is defined
+% if ~isempty(dConf) && I>1 & ~isempty(tld.bb(:,I-1))
+%     previous = tld.bb(:,I-1);
+%     sized = abs(previous(1)-previous(3)) * abs(previous(2)-previous(4));
+%     center = [mean([previous(1),previous(3)]), mean([previous(2),previous(4)])];
+%     indexes = [ ];
+%     for i = 1:length(dConf)
+%         currentBox = dBB(:,i);
+%         currentSize = abs(currentBox(1)-currentBox(3)) * abs(currentBox(2)-currentBox(4));
+%         currentCenter = [mean([currentBox(1),currentBox(3)]), mean([currentBox(2),currentBox(4)])];
+%         if pdist([currentCenter;center],'euclidean') < 0.1*max(tld.imgsize) 
+%             indexes = [indexes i];      
+%         end
+%     end
+%     dBB = dBB(:,indexes);
+%     dConf = dConf(indexes);
+% end
+    
+DT = 1; if isempty(dBB), DT = 0; end % is detector defined?
+if TR & tConf > 0.6 % if tracker is defined
     
     % copy tracker's result
     tld.bb(:,I)  = tBB;
@@ -54,8 +73,11 @@ if TR % if tracker is defined
             
             idTr = bb_overlap(tBB,tld.dt{I}.bb) > 0.7;  % get indexes of close detections
             tld.bb(:,I) = mean([repmat(tBB,1,10) tld.dt{I}.bb(:,idTr)],2);  % weighted average trackers trajectory with the close detections
-            
+            if mean(dConf) < 0.5
+               tld.valid(I) = 1;
+            end
         end
+        
     end
     
 else % if tracker is not defined
@@ -68,11 +90,17 @@ else % if tracker is not defined
             tld.conf(I)  = cConf;
             tld.size(I)  = cSize;
             tld.valid(I) = 0; 
-            fprintf('Re-initializing tracker ... \n');
-        end
+%         else
+%             
+%             [tld.conf(I),index]  = max(cConf);
+%             tld.bb(:,I)  = cBB(:,index);
+%             tld.size(I)  = cSize(index);
+%             tld.valid(I) = 0;
+         end
+        fprintf('Re-initializing tracker ... \n');
+        %[tBB tConf tValid tld] = tldTracking(tld,tld.bb(:,I),I,I); 
     end
 end
-
 %% ------------------------------------- (END) ----------------------------
 
 
@@ -82,8 +110,8 @@ if isnan(sum(tld.bb(:, I)))
   fprintf('Box lost ... \n');
 end
 
-
 if tld.control.update_detector && tld.valid(I) == 1
+    display('Learning')
     tld = tldLearning(tld,I);
 end
 

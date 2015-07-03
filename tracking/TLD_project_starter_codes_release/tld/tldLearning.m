@@ -8,10 +8,8 @@ bb    = tld.bb(:,I); % current bounding box
 img   = tld.img{I}; % current image
 
 % Check consistency -------------------------------------------------------
-
 pPatt  = tldGetPattern(img,bb,tld.model.patchsize,0,tld.model.pattern_size); % get current patch
 [pConf1,pIsin] = tldNN(pPatt,tld); % measure similarity to model
-
 if pConf1 < tld.model.nn_patch_confidence, disp('Fast change.'); tld.valid(I) = 0; return; end % too fast change of appearance
 if var(pPatt) < tld.var, disp('Low variance.'); tld.valid(I) = 0; return; end % too low variance of the patch
 if pIsin(3) == 1, disp('In negative data.'); tld.valid(I) = 0; return; end % patch is in negative data
@@ -24,6 +22,7 @@ overlap  = bb_overlap(bb,tld.grid); %Find overlap of bb with all boxes in tld.gr
 
 [nEx, bbN] = tldGenerateNegativeData(tld, I, bb, img, ...
                     tld.n_par); % generate negative example features
+
 
 %%update nearest nieghbor
 tld = tldTrainNN(pEx,nEx,tld); % updating nearest neighbour 
@@ -41,6 +40,30 @@ tld = tldTrainNN(pEx,nEx,tld); % updating nearest neighbour
 %% --------------------
 %%  tld.detection_model -- update the detection with the new tld.pex, tld.nex feature vectors 
 
+positive = zeros(2^tld.detection_model_params.comparisons+1,size(tld.ferns,3));
+negative = zeros(2^tld.detection_model_params.comparisons+1,size(tld.ferns,3));
+for i=1:size(tld.ferns,3)
+   comparisons = tld.ferns(:,:,i);
+   col1 = tld.pex(comparisons(:,1),:);
+   col2 = tld.pex(comparisons(:,2),:);
+   bin = col1 > col2;
+   str = num2str(bin');
+   str(isspace(str)) = ' ';
+   edge = 0:2^tld.detection_model_params.comparisons+1;
+   [N,~] = histcounts(bin2dec(str),edge);
+   positive(:,i) = positive(:,i) + N';
+
+   col1 = tld.nex(comparisons(:,1),:);
+   col2 = tld.nex(comparisons(:,2),:);
+   bin = col1 > col2;
+   str = num2str(bin');
+   str(isspace(str)) = ' ';
+   [N,~] = histcounts(bin2dec(str),edge);
+   negative(:,i) = negative(:,i) + N'; 
+end
+sum(positive), sum(negative);
+tld.detection_model.positive = positive;
+tld.detection_model.negative = negative;
 
 
 %% ------------------------ (END) --------------------------

@@ -69,26 +69,25 @@ tld.target = img_patch(tld.img{1}.input,tld.bb(:,1));
 % Generate Positive Examples
 [pEx,bbP] = tldGeneratePositiveData(tld,overlap,tld.img{1},tld.p_par_init);
 
-
 % Correct initial bbox
 [~, mxo] = max(overlap);
 tld.bb(:,1) = tld.grid(1:4, mxo);
 
 % Variance threshold
 if ~isempty(pEx)
-  tld.var = var(pEx(:,1))/2;
+  temp = img_patch(tld.img{1}.input,tld.bb(:,1));
+  temp = temp(:);
+  tld.var = var(double(temp))/2;
 end
 % disp(['Variance : ' num2str(tld.var)]);
 
 % Generate Negative Examples
 [nEx] = tldInitializeNegativeData(tld,overlap,tld.img{1});
-
 % Split Negative Data to Training set and Validation set
 [nEx1,nEx2] = tldSplitNegativeData(nEx);
 
 tld.pEx{1}  = pEx; % save positive patches for later
 tld.nEx{1}  = nEx; % save negative patches for later
-
 % Train using training set ------------------------------------------------
 tld.detection_model = [];
 %%% --------------------- (BEGIN) -----------------------------------------
@@ -96,9 +95,34 @@ tld.detection_model = [];
 %%        and negative example features (nEx)
 %%        from source image. Store the model in tld.detection_model.
 
+%create fern models: 10 ferns, each with 13 comparisions
+ferns = ceil(tld.model.pattern_size*rand(tld.detection_model_params.comparisons,2,tld.detection_model_params.classifiers));
+tld.ferns = ferns;
+positive = zeros(2^tld.detection_model_params.comparisons+1,tld.detection_model_params.classifiers);
+negative = zeros(2^tld.detection_model_params.comparisons+1,tld.detection_model_params.classifiers);
+for i=1:tld.detection_model_params.classifiers
+   %create binary code
+   comparisons = tld.ferns(:,:,i);
+   col1 = pEx(comparisons(:,1),:);
+   col2 = pEx(comparisons(:,2),:);
+   bin = col1 > col2;
+   str = num2str(bin');
+   str(isspace(str)) = ' ';
+   edge = 0:2^tld.detection_model_params.comparisons+1;
+   [N,~] = histcounts(bin2dec(str),edge);
+   positive(:,i) = positive(:,i) + N';
+   col1 = nEx(comparisons(:,1),:);
+   col2 = nEx(comparisons(:,2),:);
+   bin = col1 > col2;
+   str = num2str(bin');
+   str(isspace(str)) = ' ';
+   [N,~] = histcounts(bin2dec(str),edge);
+   negative(:,i) = negative(:,i) + N';
+end
+
+tld.detection_model.positive = positive;
+tld.detection_model.negative = negative; 
 %%% ------------------------- (END) ----------------------------------------
-
-
 
 % Nearest Neightbour 
 tld.pex = [];
@@ -108,8 +132,10 @@ tld = tldTrainNN(pEx,nEx1,tld);
 tld.model.num_init = size(tld.pex,2);
 
 % Estimate thresholds on validation set  ----------------------------------
-
 % Nearest neighbor
-conf_nn = tldNN(nEx2,tld);
+[conf_nn,~] = tldNN(nEx2,tld);
 tld.model.thr_nn = max(tld.model.thr_nn,max(conf_nn));
 tld.model.thr_nn_valid = max(tld.model.thr_nn_valid,tld.model.thr_nn);
+
+end
+

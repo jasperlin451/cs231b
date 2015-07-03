@@ -48,7 +48,7 @@ for i = 2:length(tld.source.idx) % for every frame
         return;
     end
     
-    if tld.plot.save == 1
+    if 0
         img = getframe;
         imwrite(img.cdata,[tld.output num2str(i,'%05d') '.png']);
     end

@@ -19,9 +19,8 @@
 function patch = img_patch(img, bb, randomize,p_par)
 
 if nargin == 4 && randomize > 0
-    
-    rand('state',randomize);
-    randn('state',randomize);
+    rand(randomize);
+    randn(randomize);
     
     NOISE = p_par.noise;
     ANGLE = p_par.angle;
@@ -51,8 +50,7 @@ if nargin == 4 && randomize > 0
     H     = Sh2*Ang*Sca*Sh1;
     bbsize = bb_size(bb);
     patch = uint8(warp(img,inv(H),box) + NOISE*randn(bbsize(1),bbsize(2)));
-    
-    
+
 else
     
     % All coordinates are integers

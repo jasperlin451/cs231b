@@ -38,14 +38,74 @@ idx_dt = [];
 %% HINT: bb_overlap in bbox/ might be a useful code to prune the grid boxes before
 %% running your detector. This is just a speed-up and might hurt performance.
 
+tld.tmp.conf = zeros(1,size(tld.grid,2));
+idx = [ ];
+%estimate trajectory
+center1=bb_center(tld.bb(:,I-1));
 
-%% ------------------ (END) -----------------------
+if I==2
+    center2=center1;
+else
+    center2=bb_center(tld.bb(:,I-2));
+end
+newCenter = center2 + (center2-center1)*0.8;
+if ~isnan(tld.bb(:,I-1))
+    for i=1:size(tld.grid,2)
+        if bb_overlap(tld.grid(1:4,i),tld.bb(:,I-1)) > 0.5 & (pdist([bb_center(tld.grid(1:4,i));newCenter]) < 0.25*max(tld.imgsize))
+            scale1 = bb_scale(tld.grid(1:4,i));
+            scale2 = bb_scale(tld.bb(:,I-1));
+            if min(scale1,scale2)/max(scale1,scale2) > 0.8
+                idx = [idx i];
+            end
+        end
+    end
+else
+    lastpositive =[];
+    for j=1:size(tld.bb,2)
+       if ~isnan(tld.bb(:,j))
+           lastpositive = j;
+       else
+           break;
+       end
+    end
+    for i=1:size(tld.grid,2)
+        if (pdist([bb_center(tld.grid(1:4,i));bb_center(tld.bb(:,lastpositive))]) < 0.5*max(tld.imgsize))
+            scale1 = bb_scale(tld.grid(1:4,i));
+            scale2 = bb_scale(tld.bb(:,I-2));
+            if min(scale1,scale2)/max(scale1,scale2) > 0.8
+                idx = [idx i];
+            end
+        end
+    end
+end
+patterns = tldGetPattern(img,tld.grid(1:4,idx),tld.model.patchsize,0,tld.model.pattern_size);
 
-
-
-num_dt = length(idx_dt); % get the number detected bounding boxes so-far 
+num_dt = length(idx); % get the number detected bounding boxes so-far 
 if num_dt == 0, tld.dt{I} = dt; return; end % if nothing detected, return
 
+fern = tld.ferns;
+positive = tld.detection_model.positive;
+negative = tld.detection_model.negative;
+
+positiveUpdates = zeros(size(fern,3),size(patterns,2));
+negativeUpdates = zeros(size(fern,3),size(patterns,2));
+for k = 1:size(fern, 3)
+   comparisons = tld.ferns(:,:,k);
+   col1 = patterns(comparisons(:,1),:);
+   col2 = patterns(comparisons(:,2),:);
+   bin = col1 > col2;
+   str = num2str(bin');
+   str(isspace(str)) = ' ';
+   positiveUpdates(k,:) = positiveUpdates(k,:) + positive(bin2dec(str)+1,k)';
+   negativeUpdates(k,:) = negativeUpdates(k,:) + negative(bin2dec(str)+1,k)';
+end
+confidences = nanmean(positiveUpdates./(positiveUpdates+negativeUpdates),1);
+tld.tmp.conf(idx) = confidences;
+idx_dt = idx((confidences>0.5));
+
+%% ------------------ (END) -----------------------
+num_dt = length(idx_dt); % get the number detected bounding boxes so-far 
+if num_dt == 0, tld.dt{I} = dt; return; end % if nothing detected, return
 
 % initialize detection structure
 dt.bb     = tld.grid(1:4,idx_dt); % bounding boxes

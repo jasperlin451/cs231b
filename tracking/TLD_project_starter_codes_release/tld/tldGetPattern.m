@@ -16,7 +16,6 @@ end
 
 % for every bounding box
 for i = 1:nBB
-    
     % sample patch
     patch = img_patch(img.input,bb(:,i));
     
